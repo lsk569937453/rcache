@@ -25,7 +25,7 @@ async fn main() -> Result<(), anyhow::Error> {
         .await
         .map_err(|e| anyhow!("Failed to bind to address"))?;
 
-    println!("Server listening on {}", addr);
+    info!("Server listening on {}", addr);
     let (sender, receiver) = mpsc::channel(1);
     let mut redis_data = RedisData {
         map: HashMap::new(),
@@ -57,12 +57,12 @@ async fn handle_connection(
     loop {
         match socket.read(&mut buf).await {
             Ok(0) => {
-                println!("Connection closed by client");
+                error!("Connection closed by client");
                 break;
             }
-            Ok(n) => {
+            Ok(_) => {
                 let (oneshot_sender, onesho_receiver) = oneshot::channel();
-                let (parsed_command, b) = Request::parse_buf(&buf)?;
+                let (parsed_command, _) = Request::parse_buf(&buf)?;
 
                 let data = TransferData {
                     parsed_command,
@@ -71,13 +71,13 @@ async fn handle_connection(
                 sender.send(data).await?;
                 let receive_data = onesho_receiver.await?;
 
-                if let Err(_) = socket.write_all(&receive_data).await {
-                    println!("Error writing data to socket");
+                if let Err(e) = socket.write_all(&receive_data).await {
+                    error!("Error writing data to socket,{}", e);
                     break;
                 }
             }
             Err(err) => {
-                println!("Error reading data from socket: {}", err);
+                error!("Error reading data from socket: {}", err);
                 break;
             }
         }

@@ -2,6 +2,7 @@ use crate::command::parser::ParsedCommand;
 use crate::command::ping::ping;
 use crate::command::response::Response;
 use crate::command::string_command::{get, set};
+use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 
 pub struct TransferData {
@@ -9,7 +10,7 @@ pub struct TransferData {
     pub sender: oneshot::Sender<Vec<u8>>,
 }
 pub struct RedisData {
-    pub map: std::collections::HashMap<String, String>,
+    pub map: HashMap<Vec<u8>, Vec<u8>>,
 }
 impl RedisData {
     pub async fn handle_receiver(&mut self, mut receiver: mpsc::Receiver<TransferData>) {
