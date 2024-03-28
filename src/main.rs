@@ -4,13 +4,14 @@ use crate::command::ping::ping;
 use crate::command::request::Request;
 use crate::command::response::Response;
 use anyhow::anyhow;
+use command::parser::ParsedCommand;
 use log::info;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task;
 pub struct TransferData {
-    data: Vec<u8>,
+    parsed_command: ParsedCommand,
     sender: oneshot::Sender<Vec<u8>>,
 }
 #[tokio::main]
@@ -55,9 +56,10 @@ async fn handle_connection(
             }
             Ok(n) => {
                 let (oneshot_sender, onesho_receiver) = oneshot::channel();
+                let (parsed_command, b) = Request::parse_buf(&buf)?;
 
                 let data = TransferData {
-                    data: buf[..n].to_vec(),
+                    parsed_command: parsed_command,
                     sender: oneshot_sender,
                 };
                 sender.send(data).await?;
@@ -90,7 +92,7 @@ async fn pre_send(buf: Vec<u8>) -> Result<(), anyhow::Error> {
 async fn handle_receiver(mut receiver: mpsc::Receiver<TransferData>) {
     while let Some(result) = receiver.recv().await {
         let sender = result.sender;
-        let data = result.data;
+        let data = result.parsed_command.get_data();
         info!("data is :{}", String::from_utf8_lossy(&data));
         let _ = sender.send("t".as_bytes().to_vec());
     }

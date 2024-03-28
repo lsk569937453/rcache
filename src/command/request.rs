@@ -68,7 +68,7 @@ impl Request {
                 return Err(anyhow!("Incomplete request"));
             }
         }
-        Ok((ParsedCommand::new(input, argv), pos))
+        Ok((ParsedCommand::new(input.to_vec(), argv), pos))
     }
 }
 fn parse_int(

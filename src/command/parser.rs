@@ -14,15 +14,15 @@ pub struct Argument {
 }
 
 /// A protocol parser
-pub struct ParsedCommand<'a> {
+pub struct ParsedCommand {
     /// The data itself
-    data: &'a [u8],
+    data: Vec<u8>,
     /// The arguments location and length
     pub argv: Vec<Argument>,
 }
-impl<'a> ParsedCommand<'a> {
+impl ParsedCommand {
     /// Creates a new parser with the data and arguments provided
-    pub fn new(data: &[u8], argv: Vec<Argument>) -> ParsedCommand {
+    pub fn new(data: Vec<u8>, argv: Vec<Argument>) -> ParsedCommand {
         ParsedCommand { data, argv }
     }
     /// Gets a `Bound` from a parameter.
@@ -158,7 +158,7 @@ impl<'a> ParsedCommand<'a> {
         Ok(&self.data[arg.pos..arg.pos + arg.len])
     }
 
-    pub fn get_data(&self) -> &'a [u8] {
-        self.data
+    pub fn get_data(&self) -> Vec<u8> {
+        self.data.clone()
     }
 }
