@@ -20,7 +20,7 @@ async fn main() -> Result<(), anyhow::Error> {
     env_logger::init();
 
     // Create a TCP listener bound to the specified address
-    let addr = "127.0.0.1:8080";
+    let addr = "0.0.0.0:6379";
     let listener = TcpListener::bind(&addr)
         .await
         .map_err(|e| anyhow!("Failed to bind to address"))?;
