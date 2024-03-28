@@ -1,21 +1,24 @@
-use std::sync::mpsc::Receiver;
 mod command;
+use crate::command::parser::ParsedCommand;
 use crate::command::ping::ping;
+use crate::command::redis_data::RedisData;
+use crate::command::redis_data::TransferData;
 use crate::command::request::Request;
 use crate::command::response::Response;
 use anyhow::anyhow;
-use command::parser::ParsedCommand;
 use log::info;
+use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task;
-pub struct TransferData {
-    parsed_command: ParsedCommand,
-    sender: oneshot::Sender<Vec<u8>>,
-}
+#[macro_use]
+extern crate log;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    env_logger::init();
+
     // Create a TCP listener bound to the specified address
     let addr = "127.0.0.1:8080";
     let listener = TcpListener::bind(&addr)
@@ -24,7 +27,10 @@ async fn main() -> Result<(), anyhow::Error> {
 
     println!("Server listening on {}", addr);
     let (sender, receiver) = mpsc::channel(1);
-    task::spawn(async move { handle_receiver(receiver).await });
+    let mut redis_data = RedisData {
+        map: HashMap::new(),
+    };
+    task::spawn(async move { redis_data.handle_receiver(receiver).await });
     loop {
         let (socket, _) = listener
             .accept()
@@ -59,7 +65,7 @@ async fn handle_connection(
                 let (parsed_command, b) = Request::parse_buf(&buf)?;
 
                 let data = TransferData {
-                    parsed_command: parsed_command,
+                    parsed_command,
                     sender: oneshot_sender,
                 };
                 sender.send(data).await?;
@@ -77,23 +83,4 @@ async fn handle_connection(
         }
     }
     Ok(())
-}
-
-async fn pre_send(buf: Vec<u8>) -> Result<(), anyhow::Error> {
-    let (parsed_command, b) = Request::parse_buf(&buf)?;
-    let command_name = parsed_command.get_str(0)?;
-    let data = match command_name {
-        "ping" => ping(parsed_command),
-        _ => Ok(Response::Nil),
-    };
-
-    Ok(())
-}
-async fn handle_receiver(mut receiver: mpsc::Receiver<TransferData>) {
-    while let Some(result) = receiver.recv().await {
-        let sender = result.sender;
-        let data = result.parsed_command.get_data();
-        info!("data is :{}", String::from_utf8_lossy(&data));
-        let _ = sender.send("t".as_bytes().to_vec());
-    }
 }
