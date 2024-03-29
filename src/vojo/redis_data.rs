@@ -1,4 +1,7 @@
-use crate::command::string_command::{append, decr, decrby, get, getdel, getex, set, setex};
+use crate::command::string_command::{
+    append, decr, decrby, get, getdel, getex, getrange, getset, incr, incrby, incrbyfloat, lcs,
+    mget, mset, msetnx, set, setex,
+};
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
 use crate::util::common_utils::mstime;
@@ -64,6 +67,16 @@ impl RedisData {
             "GET" => get(parsed_command, self),
             "GETDEL" => getdel(parsed_command, self),
             "GETEX" => getex(parsed_command, self),
+            "GETRANGE" => getrange(parsed_command, self),
+            "GETSET" => getset(parsed_command, self),
+            "INCR" => incr(parsed_command, self),
+            "INCRBY" => incrby(parsed_command, self),
+            "INCRBYFLOAT" => incrbyfloat(parsed_command, self),
+            "LCS" => lcs(parsed_command, self),
+            "MGET" => mget(parsed_command, self),
+            "MSET" => mset(parsed_command, self),
+            "MSETNX" => msetnx(parsed_command, self),
+
             "SETEX" => setex(parsed_command, self),
             _ => {
                 info!("{}", command_name);
