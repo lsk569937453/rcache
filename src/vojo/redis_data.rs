@@ -1,7 +1,7 @@
-use crate::command::parser::ParsedCommand;
-use crate::command::ping::ping;
-use crate::command::response::Response;
-use crate::command::string_command::{get, set};
+use crate::parser::ping::ping;
+use crate::parser::response::Response;
+use crate::parser::string_command::{get, set};
+use crate::vojo::parsered_command::ParsedCommand;
 use std::collections::HashMap;
 use tokio::sync::{mpsc, oneshot};
 
@@ -10,7 +10,8 @@ pub struct TransferData {
     pub sender: oneshot::Sender<Vec<u8>>,
 }
 pub struct RedisData {
-    pub map: HashMap<Vec<u8>, Vec<u8>>,
+    pub string_value: HashMap<Vec<u8>, Vec<u8>>,
+    pub expire_map: HashMap<Vec<u8>, u64>,
 }
 impl RedisData {
     pub async fn handle_receiver(&mut self, mut receiver: mpsc::Receiver<TransferData>) {
@@ -20,6 +21,7 @@ impl RedisData {
             }
         }
     }
+
     async fn handle_receiver_with_error(
         &mut self,
         transfer_data: TransferData,

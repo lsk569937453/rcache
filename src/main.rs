@@ -1,10 +1,11 @@
-mod command;
-use crate::command::parser::ParsedCommand;
-use crate::command::ping::ping;
-use crate::command::redis_data::RedisData;
-use crate::command::redis_data::TransferData;
-use crate::command::request::Request;
-use crate::command::response::Response;
+mod parser;
+mod vojo;
+use crate::parser::ping::ping;
+use crate::parser::request::Request;
+use crate::parser::response::Response;
+use crate::vojo::parsered_command::ParsedCommand;
+use crate::vojo::redis_data::RedisData;
+use crate::vojo::redis_data::TransferData;
 use anyhow::anyhow;
 use log::info;
 use std::collections::HashMap;
@@ -28,7 +29,8 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Server listening on {}", addr);
     let (sender, receiver) = mpsc::channel(1);
     let mut redis_data = RedisData {
-        map: HashMap::new(),
+        string_value: HashMap::new(),
+        expire_map: HashMap::new(),
     };
     task::spawn(async move { redis_data.handle_receiver(receiver).await });
     loop {

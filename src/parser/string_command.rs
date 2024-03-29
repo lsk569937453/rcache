@@ -1,12 +1,12 @@
-use crate::command::parser::ParsedCommand;
+use crate::vojo::parsered_command::ParsedCommand;
 
-use crate::command::response::Response;
+use crate::parser::response::Response;
 
-use super::redis_data::RedisData;
+use crate::vojo::redis_data::RedisData;
 pub fn get(parser: ParsedCommand, redis_data: &RedisData) -> Result<Response, anyhow::Error> {
     let key = parser.get_vec(1)?;
     Ok(redis_data
-        .map
+        .string_value
         .get(&key)
         .map(|v| Response::Data(v.clone()))
         .unwrap_or(Response::Nil))
@@ -14,6 +14,6 @@ pub fn get(parser: ParsedCommand, redis_data: &RedisData) -> Result<Response, an
 pub fn set(parser: ParsedCommand, redis_data: &mut RedisData) -> Result<Response, anyhow::Error> {
     let key = parser.get_vec(1)?;
     let value = parser.get_vec(2)?;
-    redis_data.map.insert(key, value);
+    redis_data.string_value.insert(key, value);
     Ok(Response::Status("OK".to_owned()))
 }
