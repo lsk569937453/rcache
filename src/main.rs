@@ -1,14 +1,17 @@
+mod command;
 mod parser;
+mod util;
 mod vojo;
 use crate::parser::ping::ping;
 use crate::parser::request::Request;
 use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::redis_data::RedisData;
-use crate::vojo::redis_data::TransferData;
+use crate::vojo::redis_data::TransferCommandData;
 use anyhow::anyhow;
 use log::info;
 use std::collections::HashMap;
+use std::sync::Arc;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
@@ -18,6 +21,8 @@ extern crate log;
 
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
+    ::std::env::set_var("RUST_LOG", "info");
+
     env_logger::init();
 
     // Create a TCP listener bound to the specified address
@@ -51,9 +56,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
 async fn handle_connection(
     mut socket: TcpStream,
-    sender: mpsc::Sender<TransferData>,
+    sender: mpsc::Sender<TransferCommandData>,
 ) -> Result<(), anyhow::Error> {
-    println!("New client connected");
+    info!("New client connected");
 
     let mut buf = vec![0u8; 1024];
     loop {
@@ -66,7 +71,7 @@ async fn handle_connection(
                 let (oneshot_sender, onesho_receiver) = oneshot::channel();
                 let (parsed_command, _) = Request::parse_buf(&buf)?;
 
-                let data = TransferData {
+                let data = TransferCommandData {
                     parsed_command,
                     sender: oneshot_sender,
                 };
