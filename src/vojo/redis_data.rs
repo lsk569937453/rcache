@@ -1,10 +1,9 @@
-use crate::command::string_command::{get, set, setex};
+use crate::command::string_command::{append, decr, decrby, get, getdel, getex, set, setex};
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
 use crate::util::common_utils::mstime;
 use crate::vojo::parsered_command::ParsedCommand;
 use std::collections::HashMap;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
@@ -34,7 +33,7 @@ impl RedisData {
                         info!("{}", e);
                     }
                 }
-                Some(data)=receiver.recv()=>{
+                Some(_)=receiver.recv()=>{
                     let expire_map=self.expire_map.clone();
 
                     for (k,v) in expire_map.iter() {
@@ -44,7 +43,6 @@ impl RedisData {
                         }
                     }
 
-                    info!("{}",expire_map.len());
                 }
             }
         }
@@ -56,17 +54,26 @@ impl RedisData {
     ) -> Result<(), anyhow::Error> {
         let parsed_command = transfer_data.parsed_command;
 
-        let command_name = parsed_command.get_str(0)?;
-        let data = match command_name {
-            "ping" => ping(parsed_command),
+        let command_name = parsed_command.get_str(0)?.to_uppercase();
+        let result = match command_name.as_str() {
+            "PING" => ping(parsed_command),
             "SET" => set(parsed_command, self),
+            "APPEND" => append(parsed_command, self),
+            "DECR" => decr(parsed_command, self),
+            "DECRBY" => decrby(parsed_command, self),
             "GET" => get(parsed_command, self),
-            "setex" => setex(parsed_command, self),
+            "GETDEL" => getdel(parsed_command, self),
+            "GETEX" => getex(parsed_command, self),
+            "SETEX" => setex(parsed_command, self),
             _ => {
                 info!("{}", command_name);
                 Ok(Response::Nil)
             }
-        }?;
+        };
+        let data = match result {
+            Ok(r) => r,
+            Err(r) => Response::Error(r.to_string()),
+        };
         tokio::spawn(async move {
             let _ = transfer_data.sender.send(data.as_bytes());
         });
@@ -76,7 +83,7 @@ impl RedisData {
 async fn scan_expire(sender: mpsc::Sender<BackgroundEvent>) {
     let mut tick_stream = interval(Duration::from_millis(1000));
     loop {
-        sender.send(BackgroundEvent::Nil).await;
+        let _ = sender.send(BackgroundEvent::Nil).await;
         tick_stream.tick().await;
     }
 }
