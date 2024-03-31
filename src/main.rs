@@ -1,25 +1,30 @@
 mod command;
+mod database;
 mod parser;
 mod util;
 mod vojo;
+use crate::database::lib::Database;
 use crate::parser::request::Request;
-use crate::vojo::redis_data::RedisData;
-use crate::vojo::redis_data::TransferCommandData;
+use crate::vojo::client::Client;
+
+use crate::database::lib::TransferCommandData;
 use anyhow::anyhow;
 use log::info;
-use std::collections::HashMap;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task;
+use tokio::time::Instant;
+
 #[macro_use]
 extern crate log;
-
+#[macro_use]
+extern crate anyhow;
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     std::env::set_var("RUST_LOG", "info");
-
     env_logger::init();
+    do_test().await;
     let addr = "0.0.0.0:6379";
     let listener = TcpListener::bind(&addr)
         .await
@@ -27,11 +32,9 @@ async fn main() -> Result<(), anyhow::Error> {
 
     info!("Server listening on {}", addr);
     let (sender, receiver) = mpsc::channel(1);
-    let mut redis_data = RedisData {
-        string_value: HashMap::new(),
-        expire_map: HashMap::new(),
-    };
-    task::spawn(async move { redis_data.handle_receiver(receiver).await });
+
+    let mut database = Database::new();
+    task::spawn(async move { database.handle_receiver(receiver).await });
     loop {
         let (socket, _) = listener
             .accept()
@@ -45,7 +48,30 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 }
+async fn do_test() {
+    let mut map = std::collections::HashMap::new();
+    let mut map2 = std::collections::HashMap::new();
+    let mut vec = vec![];
+    let mut vec2 = vec![];
 
+    for i in 0..1000000 {
+        vec.push(i.clone().to_string());
+        vec2.push(i.to_string().as_bytes().to_vec());
+    }
+    let mut now = Instant::now();
+    for i in vec.iter() {
+        map.insert(i.clone(), i.clone());
+    }
+
+    let end = now.elapsed();
+    now = Instant::now();
+    for i in vec2.iter() {
+        map2.insert(i.clone(), i.clone());
+    }
+    let end2 = now.elapsed();
+
+    info!("cost1 {},cos2:{}", end.as_micros(), end2.as_micros());
+}
 async fn handle_connection(
     mut socket: TcpStream,
     sender: mpsc::Sender<TransferCommandData>,
@@ -53,7 +79,9 @@ async fn handle_connection(
     info!("New client connected");
 
     let mut buf = vec![0u8; 1024];
+    let mut client = Client::new();
     loop {
+        let cloned_client = client.clone();
         match socket.read(&mut buf).await {
             Ok(0) => {
                 error!("Connection closed by client");
@@ -65,12 +93,15 @@ async fn handle_connection(
 
                 let data = TransferCommandData {
                     parsed_command,
+                    client: cloned_client,
                     sender: oneshot_sender,
                 };
                 sender.send(data).await?;
                 let receive_data = onesho_receiver.await?;
-
-                if let Err(e) = socket.write_all(&receive_data).await {
+                client.auth = receive_data.auth;
+                client.dbindex = receive_data.dbindex;
+                let data = receive_data.data;
+                if let Err(e) = socket.write_all(&data).await {
                     error!("Error writing data to socket,{}", e);
                     break;
                 }

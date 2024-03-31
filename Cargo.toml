@@ -21,3 +21,5 @@ openssl = { version = "0.10", features = ["vendored"] }
 chrono = "0.4.31"
 time = "0.1"
 
+skiplist = "0.5.1"
+hashbrown = "0.14"
