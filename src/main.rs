@@ -24,7 +24,6 @@ extern crate anyhow;
 async fn main() -> Result<(), anyhow::Error> {
     std::env::set_var("RUST_LOG", "info");
     env_logger::init();
-    do_test().await;
     let addr = "0.0.0.0:6379";
     let listener = TcpListener::bind(&addr)
         .await
@@ -48,30 +47,7 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 }
-async fn do_test() {
-    let mut map = std::collections::HashMap::new();
-    let mut map2 = std::collections::HashMap::new();
-    let mut vec = vec![];
-    let mut vec2 = vec![];
 
-    for i in 0..1000000 {
-        vec.push(i.clone().to_string());
-        vec2.push(i.to_string().as_bytes().to_vec());
-    }
-    let mut now = Instant::now();
-    for i in vec.iter() {
-        map.insert(i.clone(), i.clone());
-    }
-
-    let end = now.elapsed();
-    now = Instant::now();
-    for i in vec2.iter() {
-        map2.insert(i.clone(), i.clone());
-    }
-    let end2 = now.elapsed();
-
-    info!("cost1 {},cos2:{}", end.as_micros(), end2.as_micros());
-}
 async fn handle_connection(
     mut socket: TcpStream,
     sender: mpsc::Sender<TransferCommandData>,
