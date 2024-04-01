@@ -14,7 +14,6 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{mpsc, oneshot};
 use tokio::task;
-use tokio::time::Instant;
 
 #[macro_use]
 extern crate log;

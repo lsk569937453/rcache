@@ -1,5 +1,7 @@
-use crate::command::list_command::{lpop, lpush, rpop, rpush};
+use crate::command::hash_command::hset;
+use crate::command::list_command::{lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::sadd;
+use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{
     append, decr, decrby, get, getdel, getex, getrange, getset, incr, incrby, incrbyfloat, lcs,
     mget, mset, msetnx, set, setex,
@@ -9,12 +11,13 @@ use crate::parser::response::Response;
 use crate::util::common_utils::mstime;
 use crate::vojo::client::Client;
 use crate::vojo::parsered_command::ParsedCommand;
-use crate::vojo::value::Value;
-use crate::vojo::value::ValueSet;
 use crate::vojo::value::{BackgroundEvent, ValueList};
-use std::collections::HashMap;
+use crate::vojo::value::{Value, ValueHash};
+use crate::vojo::value::{ValueSet, ValueSortedSet};
 use std::collections::HashSet;
 use std::collections::LinkedList;
+use std::collections::{BTreeSet, HashMap};
+use std::hash::Hash;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
@@ -162,6 +165,62 @@ impl Database {
             });
         value_set.sadd(value)
     }
+    pub fn hset(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        field: Vec<u8>,
+
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| {
+                Value::Hash(ValueHash {
+                    data: HashMap::new(),
+                })
+            });
+        value_set.hset(field, value)
+    }
+    pub fn zadd(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        score: f64,
+        member: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_sosrted_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| {
+                Value::SortedSet(ValueSortedSet {
+                    data: BTreeSet::new(),
+                })
+            });
+        value_sosrted_set.zadd(member, score)
+    }
+    pub fn lrange(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        start: i64,
+        stop: i64,
+    ) -> Result<Response, anyhow::Error> {
+        let value_list_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        match value_list_option {
+            Some(r) => r.lrange(start, stop),
+            None => Ok(Response::Array(vec![])),
+        }
+    }
     pub fn get_mut(
         &mut self,
         db_index: usize,
@@ -250,6 +309,9 @@ impl Database {
             "LPOP" => lpop(parsed_command, self, db_index),
             "RPOP" => rpop(parsed_command, self, db_index),
             "SADD" => sadd(parsed_command, self, db_index),
+            "HSET" => hset(parsed_command, self, db_index),
+            "ZADD" => zadd(parsed_command, self, db_index),
+            "LRANGE" => lrange(parsed_command, self, db_index),
 
             "SETEX" => setex(parsed_command, self, db_index),
             _ => {

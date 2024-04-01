@@ -71,3 +71,19 @@ pub fn rpop(
     let res = db.rpop(db_index, key, count_option)?;
     Ok(res)
 }
+pub fn lrange(
+    parser: ParsedCommand,
+    db: &mut Database,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 4, "InvalidArgument");
+    let key = parser.get_vec(1)?;
+    let start = parser.get_i64(2)?;
+    let stop = parser.get_i64(3)?;
+
+    if start > stop {
+        return Err(anyhow!("InvalidArgument"));
+    }
+    let res = db.lrange(db_index, key, start, stop)?;
+    Ok(res)
+}

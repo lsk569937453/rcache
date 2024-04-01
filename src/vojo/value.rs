@@ -1,10 +1,13 @@
+use crate::command::string_command;
+use crate::parser::response::Response;
 use core::str;
 use skiplist::OrderedSkipList;
+use std::cmp::Ordering;
+use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::LinkedList;
-
-use crate::parser::response::Response;
+use std::vec;
 #[derive(PartialEq, Debug)]
 pub enum Value {
     /// Nil should not be stored, but it is used as a default for initialized values
@@ -12,6 +15,7 @@ pub enum Value {
     String(ValueString),
     List(ValueList),
     Set(ValueSet),
+    Hash(ValueHash),
     SortedSet(ValueSortedSet),
 }
 pub enum BackgroundEvent {
@@ -94,6 +98,28 @@ impl Value {
             _ => Err(anyhow!("WrongTypeError")),
         }
     }
+    pub fn hset(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::Hash(val) => {
+                if val.data.contains_key(&key) {
+                    Ok(false)
+                } else {
+                    val.data.insert(key, value);
+                    Ok(true)
+                }
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn zadd(&mut self, member: Vec<u8>, score: f64) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::SortedSet(val) => {
+                val.data.insert(SortedSetData { member, score });
+                Ok(true)
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
     pub fn lpop(&mut self, count_option: Option<i64>) -> Result<Response, anyhow::Error> {
         match self {
             Value::List(val) => {
@@ -130,6 +156,28 @@ impl Value {
             _ => Err(anyhow!("WrongTypeError")),
         }
     }
+    pub fn lrange(&self, mut start: i64, mut stop: i64) -> Result<Response, anyhow::Error> {
+        match self {
+            Value::List(val) => {
+                let mut responses = vec![];
+                if start < 0 {
+                    start = 0;
+                }
+                if stop >= (val.data.len() as i64) {
+                    stop = (val.data.len() as i64) - 1;
+                }
+
+                for (index, item) in val.data.iter().enumerate() {
+                    if index as i64 >= start && index as i64 <= stop {
+                        responses.push(Response::Data(item.clone()));
+                    }
+                }
+
+                Ok(Response::Array(responses))
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
 }
 #[derive(PartialEq, Debug, Clone)]
 pub struct ValueString {
@@ -148,8 +196,25 @@ pub struct ValueList {
 pub struct ValueSet {
     pub data: HashSet<Vec<u8>>,
 }
+#[derive(PartialEq, Debug, Clone)]
+pub struct ValueHash {
+    pub data: HashMap<Vec<u8>, Vec<u8>>,
+}
 #[derive(PartialEq, Debug)]
 pub struct ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
-    pub data: OrderedSkipList<Vec<u8>>,
+    pub data: BTreeSet<SortedSetData>,
+}
+#[derive(Debug, PartialEq, PartialOrd)]
+
+pub struct SortedSetData {
+    pub member: Vec<u8>,
+    pub score: f64,
+}
+impl Eq for SortedSetData {}
+
+impl Ord for SortedSetData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+    }
 }
