@@ -1,3 +1,5 @@
+use crate::command::list_command::{lpop, lpush, rpop, rpush};
+use crate::command::set_command::sadd;
 use crate::command::string_command::{
     append, decr, decrby, get, getdel, getex, getrange, getset, incr, incrby, incrbyfloat, lcs,
     mget, mset, msetnx, set, setex,
@@ -7,10 +9,12 @@ use crate::parser::response::Response;
 use crate::util::common_utils::mstime;
 use crate::vojo::client::Client;
 use crate::vojo::parsered_command::ParsedCommand;
-use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
-use hashbrown::HashMap;
-
+use crate::vojo::value::ValueSet;
+use crate::vojo::value::{BackgroundEvent, ValueList};
+use std::collections::HashMap;
+use std::collections::HashSet;
+use std::collections::LinkedList;
 use std::time::Duration;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
@@ -69,6 +73,95 @@ impl Database {
             .get(&key.clone());
         Ok(data)
     }
+    pub fn lpush(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<usize, anyhow::Error> {
+        let tt = Value::List(ValueList {
+            data: LinkedList::new(),
+        });
+        let value_list = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| tt);
+        value_list.lpush(value)
+    }
+
+    pub fn rpush(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<usize, anyhow::Error> {
+        let tt = Value::List(ValueList {
+            data: LinkedList::new(),
+        });
+        let value_list = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| tt);
+        value_list.rpush(value)
+    }
+    pub fn lpop(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        count_option: Option<i64>,
+    ) -> Result<Response, anyhow::Error> {
+        let value_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        if let Some(val) = value_option {
+            let res = val.lpop(count_option)?;
+            Ok(res)
+        } else {
+            Ok(Response::Nil)
+        }
+    }
+    pub fn rpop(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        count_option: Option<i64>,
+    ) -> Result<Response, anyhow::Error> {
+        let value_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        if let Some(val) = value_option {
+            let res = val.rpop(count_option)?;
+            Ok(res)
+        } else {
+            Ok(Response::Nil)
+        }
+    }
+    pub fn sadd(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key)
+            .or_insert_with(|| {
+                Value::Set(ValueSet {
+                    data: HashSet::new(),
+                })
+            });
+        value_set.sadd(value)
+    }
     pub fn get_mut(
         &mut self,
         db_index: usize,
@@ -81,6 +174,7 @@ impl Database {
             .get_mut(&key.clone());
         Ok(data)
     }
+
     pub fn remove(&mut self, db_index: usize, key: Vec<u8>) -> Result<(), anyhow::Error> {
         self.data
             .get_mut(db_index)
@@ -114,8 +208,8 @@ impl Database {
                     for (index,item) in expire_map.iter().enumerate() {
                         for (k, v) in item{
                         if v.clone() < mstime() {
-                            self.remove(index,k.to_vec());
-                            self.expire_remove(index, k.to_vec());
+                            let _=self.remove(index,k.to_vec());
+                            let _=self.expire_remove(index, k.to_vec());
                         }}
                     }
 
@@ -151,6 +245,11 @@ impl Database {
             "MGET" => mget(parsed_command, self, db_index),
             "MSET" => mset(parsed_command, self, db_index),
             "MSETNX" => msetnx(parsed_command, self, db_index),
+            "LPUSH" => lpush(parsed_command, self, db_index),
+            "RPUSH" => rpush(parsed_command, self, db_index),
+            "LPOP" => lpop(parsed_command, self, db_index),
+            "RPOP" => rpop(parsed_command, self, db_index),
+            "SADD" => sadd(parsed_command, self, db_index),
 
             "SETEX" => setex(parsed_command, self, db_index),
             _ => {

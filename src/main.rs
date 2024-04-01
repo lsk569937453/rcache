@@ -52,15 +52,13 @@ async fn handle_connection(
     mut socket: TcpStream,
     sender: mpsc::Sender<TransferCommandData>,
 ) -> Result<(), anyhow::Error> {
-    info!("New client connected");
-
     let mut buf = vec![0u8; 1024];
     let mut client = Client::new();
     loop {
         let cloned_client = client.clone();
         match socket.read(&mut buf).await {
             Ok(0) => {
-                error!("Connection closed by client");
+                info!("Connection closed by client");
                 break;
             }
             Ok(_) => {
