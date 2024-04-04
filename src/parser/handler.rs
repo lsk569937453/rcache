@@ -4,7 +4,7 @@ use crate::parser::ping::ping;
 use crate::parser::request::Request;
 use crate::parser::response::Response;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
 pub struct Handler {
     pub connect: TcpStream,
