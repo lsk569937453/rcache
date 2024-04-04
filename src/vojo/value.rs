@@ -205,14 +205,23 @@ pub struct ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
     pub data: BTreeSet<SortedSetData>,
 }
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug)]
 
 pub struct SortedSetData {
     pub member: Vec<u8>,
     pub score: f64,
 }
+impl PartialEq for SortedSetData {
+    fn eq(&self, other: &Self) -> bool {
+        self.member == other.member && self.score == other.score
+    }
+}
 impl Eq for SortedSetData {}
-
+impl PartialOrd for SortedSetData {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 impl Ord for SortedSetData {
     fn cmp(&self, other: &Self) -> Ordering {
         self.partial_cmp(other).unwrap_or(Ordering::Equal)
