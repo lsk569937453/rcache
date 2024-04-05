@@ -106,6 +106,25 @@ impl Database {
             .insert(key, value);
         Ok(())
     }
+    pub fn zadd(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        score: f64,
+        member: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_sosrted_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| {
+                Value::SortedSet(ValueSortedSet {
+                    data: BTreeSet::new(),
+                })
+            });
+        value_sosrted_set.zadd(member, score)
+    }
     // pub async fn handle_receiver_with_error(
     //     &mut self,
     //     parsed_command: ParsedCommand,
