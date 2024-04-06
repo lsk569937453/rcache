@@ -1,3 +1,5 @@
+use crate::command::set_command::sadd;
+use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{get, set};
 use crate::database::lib::DatabaseHolder;
 use crate::parser::ping::ping;
@@ -36,6 +38,8 @@ impl Handler {
             "PING" => ping(parsed_command),
             "SET" => set(parsed_command, database_holder, db_index),
             "GET" => get(parsed_command, database_holder, db_index),
+            "ZADD" => zadd(parsed_command, database_holder, db_index),
+            "SADD" => sadd(parsed_command, database_holder, db_index),
             _ => {
                 info!("{}", command_name);
                 Ok(Response::Nil)

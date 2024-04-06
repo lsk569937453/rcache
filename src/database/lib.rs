@@ -1,3 +1,5 @@
+use crate::command::set_command::sadd;
+use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{get, set};
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
@@ -50,6 +52,8 @@ impl DatabaseHolder {
             "PING" => ping(parsed_command),
             "SET" => set(parsed_command, self, db_index),
             "GET" => get(parsed_command, self, db_index),
+            "SADD" => sadd(parsed_command, self, db_index),
+            "ZADD" => zadd(parsed_command, self, db_index),
             _ => {
                 info!("{}", command_name);
                 Ok(Response::Nil)
@@ -124,6 +128,24 @@ impl Database {
                 })
             });
         value_sosrted_set.zadd(member, score)
+    }
+    pub fn sadd(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key)
+            .or_insert_with(|| {
+                Value::Set(ValueSet {
+                    data: HashSet::new(),
+                })
+            });
+        value_set.sadd(value)
     }
     // pub async fn handle_receiver_with_error(
     //     &mut self,

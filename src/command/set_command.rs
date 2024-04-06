@@ -7,12 +7,18 @@ use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
+use crate::DatabaseHolder;
+
 pub fn sadd(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() >= 3, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     let mut count = 0;
     for i in 2..parser.argv.len() {
