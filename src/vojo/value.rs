@@ -1,7 +1,7 @@
-use crate::command::string_command;
+
 use crate::parser::response::Response;
-use core::str;
-use skiplist::OrderedSkipList;
+
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -125,7 +125,7 @@ impl Value {
             Value::List(val) => {
                 if let Some(count) = count_option {
                     let mut responses = vec![];
-                    for i in 0..count {
+                    for _i in 0..count {
                         let data = val.data.pop_front().ok_or(anyhow!("no data"))?;
                         responses.push(Response::Data(data));
                     }
@@ -143,7 +143,7 @@ impl Value {
             Value::List(val) => {
                 if let Some(count) = count_option {
                     let mut responses = vec![];
-                    for i in 0..count {
+                    for _i in 0..count {
                         let data = val.data.pop_back().ok_or(anyhow!("no data"))?;
                         responses.push(Response::Data(data));
                     }

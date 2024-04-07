@@ -1,13 +1,10 @@
 use anyhow::{anyhow, ensure};
 
-use crate::database::lib::Database;
 use crate::parser::response::Response;
-use crate::util::common_utils::mstime;
+
 use crate::vojo::parsered_command::ParsedCommand;
-use crate::vojo::value::Value;
-use crate::vojo::value::ValueList;
-use crate::vojo::value::ValueString;
-use crate::DatabaseHolder;
+
+use crate::database::lib::DatabaseHolder;
 
 pub fn sadd(
     parser: ParsedCommand,
@@ -18,7 +15,7 @@ pub fn sadd(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|e| anyhow!(""))?;
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     let mut count = 0;
     for i in 2..parser.argv.len() {

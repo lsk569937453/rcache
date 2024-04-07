@@ -1,9 +1,9 @@
 use anyhow::{anyhow, ensure};
 
-use crate::database::lib::Database;
+
 use crate::database::lib::DatabaseHolder;
 use crate::parser::response::Response;
-use crate::util::common_utils::mstime;
+
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueString;
@@ -16,15 +16,15 @@ pub fn set(
     let mut database = database_lock
         .database_lock
         .lock()
-        .map_err(|e| anyhow!(""))?;
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     if let Some(value) = database.get(db_index, key.clone())? {
         ensure!(value.is_string(), "InvalidArgument");
     }
     let value = parser.get_vec(2)?;
-    let mut nx = false;
-    let mut xx = false;
-    let mut skip = false;
+    let _nx = false;
+    let _xx = false;
+    let _skip = false;
 
     let value = ValueString { data: value };
     let wrapped_value = Value::String(value);
