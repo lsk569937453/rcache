@@ -14,6 +14,7 @@ use std::collections::HashSet;
 use std::collections::LinkedList;
 use std::collections::{BTreeSet, HashMap};
 
+use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -190,30 +191,26 @@ impl Database {
             });
         value_set.sadd(value)
     }
-    // pub async fn handle_receiver_with_error(
-    //     &mut self,
-    //     parsed_command: ParsedCommand,
-    // ) -> Result<(), anyhow::Error> {
-    //     let db_index = 0;
-    //     let command_name = parsed_command.get_str(0)?.to_uppercase();
-    //     let result = match command_name.as_str() {
-    //         "PING" => ping(parsed_command),
-    //         "SET" => set(parsed_command, self, db_index),
+    pub fn hset(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        field: Vec<u8>,
 
-    //         "GET" => get(parsed_command, self, db_index),
-
-    //         _ => {
-    //             info!("{}", command_name);
-    //             Ok(Response::Nil)
-    //         }
-    //     };
-    //     let data = match result {
-    //         Ok(r) => r,
-    //         Err(r) => Response::Error(r.to_string()),
-    //     };
-
-    //     Ok(())
-    // }
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_set = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .entry(key.clone())
+            .or_insert_with(|| {
+                Value::Hash(ValueHash {
+                    data: HashMap::new(),
+                })
+            });
+        value_set.hset(field, value)
+    }
 }
 
 async fn scan_expire(sender: mpsc::Sender<BackgroundEvent>) {

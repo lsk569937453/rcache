@@ -1,3 +1,5 @@
+use crate::command::hash_command::hset;
+use crate::command::list_command::{lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::sadd;
 use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{get, set};
@@ -38,8 +40,15 @@ impl Handler {
             "PING" => ping(parsed_command),
             "SET" => set(parsed_command, database_holder, db_index),
             "GET" => get(parsed_command, database_holder, db_index),
-            "ZADD" => zadd(parsed_command, database_holder, db_index),
+            "LPUSH" => lpush(parsed_command, database_holder, db_index),
+            "RPUSH" => rpush(parsed_command, database_holder, db_index),
+            "LPOP" => lpop(parsed_command, database_holder, db_index),
+            "RPOP" => rpop(parsed_command, database_holder, db_index),
             "SADD" => sadd(parsed_command, database_holder, db_index),
+            "HSET" => hset(parsed_command, database_holder, db_index),
+            "ZADD" => zadd(parsed_command, database_holder, db_index),
+            "LRANGE" => lrange(parsed_command, database_holder, db_index),
+
             _ => {
                 info!("{}", command_name);
                 Ok(Response::Nil)
