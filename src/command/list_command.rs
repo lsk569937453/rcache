@@ -1,20 +1,24 @@
 use std::collections::LinkedList;
 
-use anyhow::{anyhow, ensure};
-
 use crate::database::lib::Database;
+use crate::database::lib::DatabaseHolder;
 use crate::parser::response::Response;
 use crate::util::common_utils::mstime;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
+use anyhow::{anyhow, ensure};
 pub fn lpush(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() > 2, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
 
     let mut len = 0;
@@ -27,10 +31,14 @@ pub fn lpush(
 }
 pub fn rpush(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() > 2, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
 
     let mut len = 0;
@@ -43,10 +51,14 @@ pub fn rpush(
 }
 pub fn lpop(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() >= 2, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     let count_option = if parser.argv.len() == 3 {
         Some(parser.get_i64(2)?)
@@ -58,10 +70,14 @@ pub fn lpop(
 }
 pub fn rpop(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() >= 2, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     let count_option = if parser.argv.len() == 3 {
         Some(parser.get_i64(2)?)
@@ -73,10 +89,14 @@ pub fn rpop(
 }
 pub fn lrange(
     parser: ParsedCommand,
-    db: &mut Database,
+    database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() == 4, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_e| anyhow!(""))?;
     let key = parser.get_vec(1)?;
     let start = parser.get_i64(2)?;
     let stop = parser.get_i64(3)?;

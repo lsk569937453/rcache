@@ -5,20 +5,18 @@ mod util;
 mod vojo;
 use crate::database::lib::Database;
 use crate::parser::request::Request;
-use crate::vojo::client::Client;
 
-use crate::database::lib::TransferCommandData;
-use anyhow::anyhow;
-use log::info;
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{mpsc, oneshot};
+use crate::database::lib::DatabaseHolder;
+use crate::parser::handler::Handler;
+
+use std::sync::{Arc, Mutex};
+use tokio::net::TcpListener;
 use tokio::task;
-
 #[macro_use]
 extern crate log;
 #[macro_use]
 extern crate anyhow;
+
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     std::env::set_var("RUST_LOG", "info");
@@ -29,61 +27,30 @@ async fn main() -> Result<(), anyhow::Error> {
         .map_err(|e| anyhow!("Failed to bind to address,{}", e))?;
 
     info!("Server listening on {}", addr);
-    let (sender, receiver) = mpsc::channel(1);
 
-    let mut database = Database::new();
-    task::spawn(async move { database.handle_receiver(receiver).await });
+    let database = DatabaseHolder {
+        database_lock: Arc::new(Mutex::new(Database::new())),
+    };
     loop {
         let (socket, _) = listener
             .accept()
             .await
             .expect("Failed to accept incoming connection");
-        let cloned_sender = sender.clone();
+        let cloned_database = database.clone();
+        let handler = Handler {
+            connect: socket,
+            database_holder: cloned_database,
+        };
         task::spawn(async move {
-            if let Err(e) = handle_connection(socket, cloned_sender).await {
-                info!("{}", e);
+            if let Err(e) = handle_connection(handler).await {
+                info!("The error is {}", e);
             }
         });
     }
 }
 
-async fn handle_connection(
-    mut socket: TcpStream,
-    sender: mpsc::Sender<TransferCommandData>,
-) -> Result<(), anyhow::Error> {
-    let mut buf = vec![0u8; 1024];
-    let mut client = Client::new();
+async fn handle_connection(mut handler: Handler) -> Result<(), anyhow::Error> {
     loop {
-        let cloned_client = client.clone();
-        match socket.read(&mut buf).await {
-            Ok(0) => {
-                info!("Connection closed by client");
-                break;
-            }
-            Ok(_) => {
-                let (oneshot_sender, onesho_receiver) = oneshot::channel();
-                let (parsed_command, _) = Request::parse_buf(&buf)?;
-
-                let data = TransferCommandData {
-                    parsed_command,
-                    client: cloned_client,
-                    sender: oneshot_sender,
-                };
-                sender.send(data).await?;
-                let receive_data = onesho_receiver.await?;
-                client.auth = receive_data.auth;
-                client.dbindex = receive_data.dbindex;
-                let data = receive_data.data;
-                if let Err(e) = socket.write_all(&data).await {
-                    error!("Error writing data to socket,{}", e);
-                    break;
-                }
-            }
-            Err(err) => {
-                error!("Error reading data from socket: {}", err);
-                break;
-            }
-        }
+        handler.run().await?;
     }
-    Ok(())
 }

@@ -1,7 +1,5 @@
-use crate::command::string_command;
 use crate::parser::response::Response;
-use core::str;
-use skiplist::OrderedSkipList;
+
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -125,7 +123,7 @@ impl Value {
             Value::List(val) => {
                 if let Some(count) = count_option {
                     let mut responses = vec![];
-                    for i in 0..count {
+                    for _i in 0..count {
                         let data = val.data.pop_front().ok_or(anyhow!("no data"))?;
                         responses.push(Response::Data(data));
                     }
@@ -143,7 +141,7 @@ impl Value {
             Value::List(val) => {
                 if let Some(count) = count_option {
                     let mut responses = vec![];
-                    for i in 0..count {
+                    for _i in 0..count {
                         let data = val.data.pop_back().ok_or(anyhow!("no data"))?;
                         responses.push(Response::Data(data));
                     }
@@ -205,16 +203,37 @@ pub struct ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
     pub data: BTreeSet<SortedSetData>,
 }
-#[derive(Debug, PartialEq, PartialOrd)]
+#[derive(Debug)]
 
 pub struct SortedSetData {
     pub member: Vec<u8>,
     pub score: f64,
 }
+impl PartialEq for SortedSetData {
+    fn eq(&self, other: &Self) -> bool {
+        self.member == other.member && self.score == other.score
+    }
+}
 impl Eq for SortedSetData {}
-
+impl PartialOrd for SortedSetData {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        Some(self.cmp(other))
+    }
+}
 impl Ord for SortedSetData {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        // First, compare the scores
+        match self.score.partial_cmp(&other.score) {
+            Some(ordering) => {
+                // If scores are different, return the ordering
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            None => return Ordering::Less, // Handle NaN cases
+        }
+
+        // If scores are equal, compare the members
+        self.member.cmp(&other.member)
     }
 }
