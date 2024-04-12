@@ -2,7 +2,7 @@ use crate::command::hash_command::hset;
 use crate::command::list_command::{lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::sadd;
 use crate::command::sorted_set_command::zadd;
-use crate::command::string_command::{get, set};
+use crate::command::string_command::{get, incr, set};
 use crate::database::lib::DatabaseHolder;
 use crate::parser::ping::ping;
 use crate::parser::request::Request;
@@ -48,6 +48,7 @@ impl Handler {
             "HSET" => hset(parsed_command, database_holder, db_index),
             "ZADD" => zadd(parsed_command, database_holder, db_index),
             "LRANGE" => lrange(parsed_command, database_holder, db_index),
+            "INCR" => incr(parsed_command, database_holder, db_index),
 
             _ => {
                 info!("{}", command_name);

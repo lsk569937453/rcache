@@ -1,6 +1,5 @@
 use anyhow::{anyhow, ensure};
 
-
 use crate::database::lib::DatabaseHolder;
 use crate::parser::response::Response;
 
@@ -50,4 +49,48 @@ pub fn get(
     } else {
         Ok(Response::Nil)
     }
+}
+pub fn incr(
+    parser: ParsedCommand,
+    db: &mut DatabaseHolder,
+    dbindex: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 2, "InvalidArgument");
+
+    generic_incr(parser, db, dbindex, 1)
+}
+fn generic_incr(
+    parser: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    dbindex: usize,
+    increment: i64,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 2, "InvalidArgument");
+    let mut db = database_lock
+        .database_lock
+        .lock()
+        .map_err(|_| anyhow!(""))?;
+    let key = parser.get_vec(1)?;
+    let option_val = db.get(dbindex, key.clone())?;
+    if let Some(value) = option_val {
+        ensure!(value.is_string(), "InvalidArgument");
+    }
+    let value = match option_val {
+        Some(v) => {
+            let data = v.to_value_string()?.data;
+            std::str::from_utf8(&data)?.parse::<i64>()?
+        }
+        None => 0,
+    };
+    let value_integer = value + increment;
+
+    db.insert(
+        dbindex,
+        key,
+        Value::String(ValueString {
+            data: value_integer.to_string().as_bytes().to_vec(),
+        }),
+    )?;
+
+    Ok(Response::Status("OK".to_owned()))
 }
