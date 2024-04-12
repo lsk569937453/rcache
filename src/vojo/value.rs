@@ -1,6 +1,4 @@
-
 use crate::parser::response::Response;
-
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -224,6 +222,18 @@ impl PartialOrd for SortedSetData {
 }
 impl Ord for SortedSetData {
     fn cmp(&self, other: &Self) -> Ordering {
-        self.partial_cmp(other).unwrap_or(Ordering::Equal)
+        // First, compare the scores
+        match self.score.partial_cmp(&other.score) {
+            Some(ordering) => {
+                // If scores are different, return the ordering
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            None => return Ordering::Less, // Handle NaN cases
+        }
+
+        // If scores are equal, compare the members
+        self.member.cmp(&other.member)
     }
 }

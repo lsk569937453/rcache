@@ -13,16 +13,14 @@ pub fn zadd(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .map_err(|_e| anyhow!("error"))?;
     let key = parser.get_vec(1)?;
-
     let mut i = 2;
     let mut count = 0;
     loop {
         let score = parser.get_f64(i)?;
         let member = parser.get_vec(i + 1)?;
         i += 2;
-
         if db.zadd(db_index, key.clone(), score, member)? {
             count += 1;
         }

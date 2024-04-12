@@ -43,7 +43,7 @@ async fn main() -> Result<(), anyhow::Error> {
         };
         task::spawn(async move {
             if let Err(e) = handle_connection(handler).await {
-                info!("{}", e);
+                info!("The error is {}", e);
             }
         });
     }

@@ -57,7 +57,10 @@ impl Handler {
         };
         let data = match result {
             Ok(r) => r,
-            Err(r) => Response::Error(r.to_string()),
+            Err(r) => {
+                error!("The error is {}", r);
+                Response::Error(r.to_string())
+            }
         };
         self.connect.write_all(&data.as_bytes()).await?;
         Ok(())
