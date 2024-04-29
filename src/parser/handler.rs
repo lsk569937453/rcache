@@ -18,7 +18,6 @@ pub struct Handler {
 impl Handler {
     pub async fn run(&mut self) -> Result<(), anyhow::Error> {
         let mut buf = vec![0u8; 1024];
-
         let parsed_command = match self.connect.read(&mut buf).await {
             Ok(0) => {
                 info!("Connection closed by client");

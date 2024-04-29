@@ -23,11 +23,47 @@ use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
+use tokio::time::Instant;
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
 }
+impl DatabaseHolder {
+    pub async fn expire_loop(&self) -> Result<(), anyhow::Error> {
+        let mut interval = interval(Duration::from_millis(200));
+        loop {
+            interval.tick().await;
+            let mut lock = self
+                .database_lock
+                .lock()
+                .map_err(|e| anyhow!("Get Lock error ,error is {}", e))?;
+            let current_time = Instant::now();
 
+            for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
+                // Collect keys that have expired
+                let expired_keys: Vec<Vec<u8>> = map
+                    .iter()
+                    .filter(|(_, &time)| {
+                        let time_duration = Duration::from_secs(time as u64);
+                        let expiration_time = current_time.checked_sub(time_duration);
+                        expiration_time.is_none() // If the expiration time is None, it's expired
+                    })
+                    .map(|(key, _)| key.clone())
+                    .collect();
+
+                // Remove expired keys from the hashmap
+                for key in expired_keys {
+                    debug!(
+                        "the key |{:?}| in slot {} has been removed",
+                        key.clone(),
+                        index
+                    );
+                    map.remove(&key);
+                }
+            }
+        }
+    }
+}
 pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,
