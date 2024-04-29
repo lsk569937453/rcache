@@ -54,24 +54,29 @@ async fn main() -> Result<(), anyhow::Error> {
         database_lock: Arc::new(Mutex::new(Database::new())),
     };
     loop {
-        let (socket, _) = listener
+        let (socket, socket_addr) = listener
             .accept()
             .await
             .expect("Failed to accept incoming connection");
+        let remote_addr = socket.peer_addr()?.to_string();
         let cloned_database = database.clone();
         let handler = Handler {
             connect: socket,
             database_holder: cloned_database,
         };
         task::spawn(async move {
-            if let Err(e) = handle_connection(handler).await {
+            if let Err(e) = handle_connection(handler, remote_addr.clone()).await {
                 info!("The error is {}", e);
             }
         });
     }
 }
+#[instrument(skip(handler))]
+async fn handle_connection(
+    mut handler: Handler,
 
-async fn handle_connection(mut handler: Handler) -> Result<(), anyhow::Error> {
+    _remote_addr: String,
+) -> Result<(), anyhow::Error> {
     loop {
         handler.run().await?;
     }
