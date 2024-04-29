@@ -9,19 +9,27 @@ use crate::parser::request::Request;
 use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
 
+use clap::Parser;
 use std::sync::{Arc, Mutex};
 use tokio::net::TcpListener;
 use tokio::task;
-use tracing::metadata::LevelFilter;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling;
+use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::Layer;
-use tracing_subscriber::{fmt, layer::SubscriberExt};
 #[macro_use]
 extern crate tracing;
 #[macro_use]
 extern crate anyhow;
+#[derive(Parser)]
+#[command(author, version, about, long_about)]
+struct Cli {
+    /// The request url,like http://www.google.com
+    #[arg(default_value_t = 6379)]
+    port: u32,
+}
+
 fn setup_logger() -> Result<WorkerGuard, anyhow::Error> {
     let app_file = rolling::daily("./logs", "access.log");
     let (non_blocking_appender, guard) = NonBlockingBuilder::default()
@@ -40,25 +48,44 @@ fn setup_logger() -> Result<WorkerGuard, anyhow::Error> {
     Ok(guard)
 }
 #[tokio::main]
+// The main function of our server. It sets up the logger, starts the database expiration loop,
+// and listens for incoming connections. For each incoming connection, it creates a handler
+// and spawns a new task to handle the connection.
+#[allow(dead_code)]
 async fn main() -> Result<(), anyhow::Error> {
     let _worker_guard = setup_logger()?;
+    let cli: Cli = Cli::parse();
+    let port = cli.port;
+    let addr = format!(r#"0.0.0.0:{port}"#);
 
-    let addr = "0.0.0.0:6379";
+    // Bind to the specified address and port
     let listener = TcpListener::bind(&addr)
         .await
-        .map_err(|e| anyhow!("Failed to bind to address,{}", e))?;
-
+        .expect(&format!("Failed to bind to address,{}", addr));
     info!("Server listening on {}", addr);
 
+    // Create a new instance of our database
     let database = DatabaseHolder {
         database_lock: Arc::new(Mutex::new(Database::new())),
     };
+
+    // Spawn a new task that will run the database expiration loop
+    let cloned_database = database.clone();
+    tokio::spawn(async move {
+        if let Err(e) = cloned_database.expire_loop().await {
+            error!("The error is {}", e);
+        }
+    });
+
     loop {
-        let (socket, socket_addr) = listener
+        // Accept an incoming connection and get the remote address
+        let (socket, _) = listener
             .accept()
             .await
             .expect("Failed to accept incoming connection");
         let remote_addr = socket.peer_addr()?.to_string();
+
+        // Create a new handler and spawn a new task to handle the connection
         let cloned_database = database.clone();
         let handler = Handler {
             connect: socket,
@@ -71,10 +98,10 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 }
+
 #[instrument(skip(handler))]
 async fn handle_connection(
     mut handler: Handler,
-
     _remote_addr: String,
 ) -> Result<(), anyhow::Error> {
     loop {
