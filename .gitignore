@@ -17,3 +17,4 @@ Cargo.lock
 # Added by cargo
 rcache
 /target
+logs
