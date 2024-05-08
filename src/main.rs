@@ -48,10 +48,7 @@ fn setup_logger() -> Result<WorkerGuard, anyhow::Error> {
     Ok(guard)
 }
 #[tokio::main]
-// The main function of our server. It sets up the logger, starts the database expiration loop,
-// and listens for incoming connections. For each incoming connection, it creates a handler
-// and spawns a new task to handle the connection.
-#[allow(dead_code)]
+
 async fn main() -> Result<(), anyhow::Error> {
     let _worker_guard = setup_logger()?;
     let cli: Cli = Cli::parse();
@@ -61,7 +58,7 @@ async fn main() -> Result<(), anyhow::Error> {
     // Bind to the specified address and port
     let listener = TcpListener::bind(&addr)
         .await
-        .expect(&format!("Failed to bind to address,{}", addr));
+        .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
 
     // Create a new instance of our database
