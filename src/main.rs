@@ -10,8 +10,9 @@ use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
 
 use clap::Parser;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use tokio::net::TcpListener;
+use tokio::sync::Mutex;
 use tokio::task;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling;
@@ -67,13 +68,7 @@ async fn main() -> Result<(), anyhow::Error> {
     };
 
     // Spawn a new task that will run the database expiration loop
-    let cloned_database_holder = database_holder.clone();
-    tokio::spawn(async move {
-        if let Err(e) = cloned_database_holder.expire_loop().await {
-            error!("The error is {}", e);
-        }
-    });
-
+    let _ = start_loop(database_holder.clone()).await;
     loop {
         // Accept an incoming connection and get the remote address
         let (socket, _) = listener
@@ -95,7 +90,22 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 }
+pub async fn start_loop(database_holder: DatabaseHolder) -> Result<(), anyhow::Error> {
+    let cloned_database_holder1 = database_holder.clone();
+    let cloned_database_holder2 = database_holder.clone();
 
+    tokio::spawn(async move {
+        if let Err(e) = cloned_database_holder1.expire_loop().await {
+            error!("The error is {}", e);
+        }
+    });
+    tokio::spawn(async move {
+        if let Err(e) = cloned_database_holder2.rdb_save().await {
+            error!("The error is {}", e);
+        }
+    });
+    Ok(())
+}
 #[instrument(skip(handler))]
 async fn handle_connection(
     mut handler: Handler,

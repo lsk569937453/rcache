@@ -4,16 +4,13 @@ use crate::vojo::parsered_command::ParsedCommand;
 
 use crate::database::lib::DatabaseHolder;
 use anyhow::{anyhow, ensure};
-pub fn zadd(
+pub async fn zadd(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() > 2, "InvalidArgument");
-    let mut db = database_lock
-        .database_lock
-        .lock()
-        .map_err(|_e| anyhow!("error"))?;
+    let mut db = database_lock.database_lock.lock().await;
     let key = parser.get_vec(1)?;
     let mut i = 2;
     let mut count = 0;

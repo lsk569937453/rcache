@@ -6,16 +6,13 @@ use crate::vojo::parsered_command::ParsedCommand;
 
 use crate::database::lib::DatabaseHolder;
 
-pub fn sadd(
+pub async fn sadd(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() >= 3, "InvalidArgument");
-    let mut db = database_lock
-        .database_lock
-        .lock()
-        .map_err(|_e| anyhow!(""))?;
+    let mut db = database_lock.database_lock.lock().await;
     let key = parser.get_vec(1)?;
     let mut count = 0;
     for i in 2..parser.argv.len() {

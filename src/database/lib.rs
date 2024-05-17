@@ -10,35 +10,38 @@ use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
 use crate::Request;
-use std::collections::HashSet;
+use std::borrow::Cow;
 use std::collections::LinkedList;
 use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashSet, VecDeque};
 
+use super::info::NodeInfo;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use std::sync::{Arc, Mutex};
+use arc_swap::ArcSwap;
+use bincode::{config, Decode, Encode};
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::fs::OpenOptions;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
+use tokio::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
-
-use super::info::NodeInfo;
-#[derive(Clone)]
+use tracing_subscriber::fmt::format;
 pub struct DatabaseHolder {
-    pub database_lock: Arc<Mutex<Database>>,
+    pub database_lock: ArcSwap<Mutex<Database>>,
 }
 impl DatabaseHolder {
     pub async fn expire_loop(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(200));
         loop {
             interval.tick().await;
-            let mut lock = self
-                .database_lock
-                .lock()
-                .map_err(|e| anyhow!("Get Lock error ,error is {}", e))?;
+            let cfg = self.database_lock.load();
+
+            let mut lock = cfg.lock().await;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
@@ -65,7 +68,37 @@ impl DatabaseHolder {
             }
         }
     }
+    pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
+        let mut interval = interval(Duration::from_millis(10000));
+        let file_path = format!("{}.rdb", "test");
+        let config = config::standard();
+        let cow_database_holder = Cow::Borrowed(self);
+        loop {
+            interval.tick().await;
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true) // Create the file if it does not exist
+                .open(file_path.clone())
+                .await?;
+            let lock = cow_database_holder.database_lock.lock().await;
+            let current_time = Instant::now();
+            let database_cloned = lock.clone();
+            let key_len = database_cloned.data[0].len();
+            drop(lock);
+            let encoded: Vec<u8> =
+                bincode::encode_to_vec(&database_cloned, config.clone()).unwrap();
+            let _ = file.write_all(&encoded).await;
+            info!(
+                "Rdb file has been saved,keys count is {},time cost {}ms",
+                key_len,
+                current_time.elapsed().as_millis()
+            );
+        }
+    }
 }
+#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+
 pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,
@@ -114,7 +147,7 @@ impl Database {
         value: Vec<u8>,
     ) -> Result<usize, anyhow::Error> {
         let tt = Value::List(ValueList {
-            data: LinkedList::new(),
+            data: VecDeque::new(),
         });
         let value_list = self
             .data
@@ -131,7 +164,7 @@ impl Database {
         value: Vec<u8>,
     ) -> Result<usize, anyhow::Error> {
         let tt = Value::List(ValueList {
-            data: LinkedList::new(),
+            data: VecDeque::new(),
         });
         let value_list = self
             .data
