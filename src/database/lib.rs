@@ -31,17 +31,17 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
 use tracing_subscriber::fmt::format;
+#[derive(Clone)]
 pub struct DatabaseHolder {
-    pub database_lock: ArcSwap<Mutex<Database>>,
+    pub database_lock: Arc<Mutex<Database>>,
 }
 impl DatabaseHolder {
     pub async fn expire_loop(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(200));
         loop {
             interval.tick().await;
-            let cfg = self.database_lock.load();
 
-            let mut lock = cfg.lock().await;
+            let mut lock = self.database_lock.lock().await;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
@@ -72,7 +72,6 @@ impl DatabaseHolder {
         let mut interval = interval(Duration::from_millis(10000));
         let file_path = format!("{}.rdb", "test");
         let config = config::standard();
-        let cow_database_holder = Cow::Borrowed(self);
         loop {
             interval.tick().await;
             let mut file = OpenOptions::new()
@@ -81,17 +80,20 @@ impl DatabaseHolder {
                 .truncate(true) // Create the file if it does not exist
                 .open(file_path.clone())
                 .await?;
-            let lock = cow_database_holder.database_lock.lock().await;
+            let lock = self.database_lock.lock().await;
             let current_time = Instant::now();
-            let database_cloned = lock.clone();
-            let key_len = database_cloned.data[0].len();
+            let encoded: Vec<u8> ={
+                let data = &*lock;
+                bincode::encode_to_vec(data, config.clone()).unwrap()
+            };
+            let key_len = lock.data[0].len();
+            let first_cost=current_time.elapsed();
             drop(lock);
-            let encoded: Vec<u8> =
-                bincode::encode_to_vec(&database_cloned, config.clone()).unwrap();
             let _ = file.write_all(&encoded).await;
             info!(
-                "Rdb file has been saved,keys count is {},time cost {}ms",
+                "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                 key_len,
+                first_cost.as_millis(),
                 current_time.elapsed().as_millis()
             );
         }
