@@ -26,7 +26,7 @@ use tokio::fs::OpenOptions;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
@@ -41,7 +41,7 @@ impl DatabaseHolder {
         loop {
             interval.tick().await;
 
-            let mut lock = self.database_lock.lock().await;
+            let mut lock = self.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
@@ -80,7 +80,7 @@ impl DatabaseHolder {
                 .truncate(true) // Create the file if it does not exist
                 .open(file_path.clone())
                 .await?;
-            let lock = self.database_lock.lock().await;
+            let lock = self.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
             let key_len = lock.data[0].len();
             let data_base=lock.clone();
             drop(lock);

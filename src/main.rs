@@ -12,7 +12,7 @@ use crate::parser::handler::Handler;
 use clap::Parser;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::Mutex;
+use std::sync::Mutex;
 use tokio::task;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
 use tracing_appender::rolling;
