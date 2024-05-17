@@ -62,14 +62,14 @@ async fn main() -> Result<(), anyhow::Error> {
     info!("Server listening on {}", addr);
 
     // Create a new instance of our database
-    let database = DatabaseHolder {
+    let database_holder = DatabaseHolder {
         database_lock: Arc::new(Mutex::new(Database::new())),
     };
 
     // Spawn a new task that will run the database expiration loop
-    let cloned_database = database.clone();
+    let cloned_database_holder = database_holder.clone();
     tokio::spawn(async move {
-        if let Err(e) = cloned_database.expire_loop().await {
+        if let Err(e) = cloned_database_holder.expire_loop().await {
             error!("The error is {}", e);
         }
     });
@@ -83,7 +83,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let remote_addr = socket.peer_addr()?.to_string();
 
         // Create a new handler and spawn a new task to handle the connection
-        let cloned_database = database.clone();
+        let cloned_database = database_holder.clone();
         let handler = Handler {
             connect: socket,
             database_holder: cloned_database,

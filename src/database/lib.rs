@@ -24,6 +24,8 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
+
+use super::info::NodeInfo;
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -67,13 +69,14 @@ impl DatabaseHolder {
 pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,
+    pub node_info: NodeInfo,
 }
 
 impl Database {
     pub fn new() -> Self {
         let mut data_vec = vec![];
         let mut expire_map = vec![];
-
+        let node_info = NodeInfo::new();
         for _i in 0..16 {
             data_vec.push(HashMap::new());
             expire_map.push(HashMap::new());
@@ -81,6 +84,7 @@ impl Database {
         Database {
             data: data_vec,
             expire_map,
+            node_info,
         }
     }
     pub fn get(&self, db_index: usize, key: Vec<u8>) -> Result<Option<&Value>, anyhow::Error> {
