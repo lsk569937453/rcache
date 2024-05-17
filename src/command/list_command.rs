@@ -9,7 +9,7 @@ use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
 use anyhow::{anyhow, ensure};
-pub fn lpush(
+pub async fn lpush(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -18,7 +18,7 @@ pub fn lpush(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
 
     let mut len = 0;
@@ -29,7 +29,7 @@ pub fn lpush(
 
     Ok(Response::Integer(len as i64))
 }
-pub fn rpush(
+pub async  fn rpush(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -38,7 +38,7 @@ pub fn rpush(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
 
     let mut len = 0;
@@ -49,7 +49,7 @@ pub fn rpush(
 
     Ok(Response::Integer(len as i64))
 }
-pub fn lpop(
+pub async fn lpop(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -58,7 +58,7 @@ pub fn lpop(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let count_option = if parser.argv.len() == 3 {
         Some(parser.get_i64(2)?)
@@ -68,7 +68,7 @@ pub fn lpop(
     let res = db.lpop(db_index, key, count_option)?;
     Ok(res)
 }
-pub fn rpop(
+pub async  fn rpop(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -77,7 +77,7 @@ pub fn rpop(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let count_option = if parser.argv.len() == 3 {
         Some(parser.get_i64(2)?)
@@ -87,7 +87,7 @@ pub fn rpop(
     let res = db.rpop(db_index, key, count_option)?;
     Ok(res)
 }
-pub fn lrange(
+pub async fn lrange(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -96,7 +96,7 @@ pub fn lrange(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let start = parser.get_i64(2)?;
     let stop = parser.get_i64(3)?;

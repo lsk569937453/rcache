@@ -6,7 +6,7 @@ use crate::vojo::parsered_command::ParsedCommand;
 
 use crate::database::lib::DatabaseHolder;
 
-pub fn sadd(
+pub async fn sadd(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -15,7 +15,7 @@ pub fn sadd(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let mut count = 0;
     for i in 2..parser.argv.len() {

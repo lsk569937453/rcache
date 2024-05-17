@@ -10,7 +10,8 @@ use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
 
 use clap::Parser;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use tokio::sync::Mutex;
 use tokio::net::TcpListener;
 use tokio::task;
 use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};

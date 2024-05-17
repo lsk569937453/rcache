@@ -6,7 +6,7 @@ use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueString;
-pub fn set(
+pub async fn set(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -15,7 +15,7 @@ pub fn set(
     let mut database = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     if let Some(value) = database.get(db_index, key.clone())? {
         ensure!(value.is_string(), "InvalidArgument");
@@ -31,7 +31,7 @@ pub fn set(
     Ok(Response::Status("OK".to_owned()))
 }
 
-pub fn get(
+pub async fn get(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
@@ -40,7 +40,7 @@ pub fn get(
     let database = database_lock
         .database_lock
         .lock()
-        .map_err(|_| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let val_option = database.get(dbindex, key)?;
     if let Some(value) = val_option {
@@ -50,16 +50,16 @@ pub fn get(
         Ok(Response::Nil)
     }
 }
-pub fn incr(
+pub async  fn incr(
     parser: ParsedCommand,
     db: &mut DatabaseHolder,
     dbindex: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() == 2, "InvalidArgument");
 
-    generic_incr(parser, db, dbindex, 1)
+    generic_incr(parser, db, dbindex, 1).await
 }
-fn generic_incr(
+async fn generic_incr(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
@@ -69,7 +69,7 @@ fn generic_incr(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let option_val = db.get(dbindex, key.clone())?;
     if let Some(value) = option_val {

@@ -16,7 +16,8 @@ use std::collections::{BTreeSet, HashMap};
 
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc};
+use tokio::sync::Mutex;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -36,7 +37,7 @@ impl DatabaseHolder {
             let mut lock = self
                 .database_lock
                 .lock()
-                .map_err(|e| anyhow!("Get Lock error ,error is {}", e))?;
+                .await;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {

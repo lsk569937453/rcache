@@ -9,7 +9,7 @@ use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
-pub fn hset(
+pub async fn hset(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -18,7 +18,7 @@ pub fn hset(
     let mut db = database_lock
         .database_lock
         .lock()
-        .map_err(|_e| anyhow!(""))?;
+        .await;
     let key = parser.get_vec(1)?;
     let mut len = 0;
     for i in 0..(parser.argv.len() - 2) / 2 {
