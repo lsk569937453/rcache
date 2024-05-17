@@ -6,7 +6,7 @@ use crate::vojo::parsered_command::ParsedCommand;
 
 use crate::database::lib::DatabaseHolder;
 
-pub async fn sadd(
+pub  fn sadd(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,

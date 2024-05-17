@@ -22,7 +22,7 @@ use arc_swap::ArcSwap;
 use bincode::{config, Decode, Encode};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::fs::OpenOptions;
+use std::fs::OpenOptions;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
@@ -30,7 +30,7 @@ use std::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
-use tracing_subscriber::fmt::format;
+use tracing_subscriber::fmt::format;use std::io::Write;
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -79,18 +79,17 @@ impl DatabaseHolder {
                 .create(true)
                 .truncate(true) // Create the file if it does not exist
                 .open(file_path.clone())
-                .await?;
+                ?;
             let lock = self.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
             let key_len = lock.data[0].len();
             let data_base=lock.clone();
             drop(lock);
-
             let current_time = Instant::now();
             let encoded: Vec<u8> ={
                 bincode::encode_to_vec(data_base, config.clone()).unwrap()
             };
             let first_cost=current_time.elapsed();
-            let _ = file.write_all(&encoded).await;
+            let _ = file.write_all(&encoded);
             info!(
                 "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                 key_len,

@@ -9,7 +9,7 @@ use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
-pub async fn hset(
+pub  fn hset(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,

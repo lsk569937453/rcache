@@ -4,7 +4,7 @@ use crate::vojo::parsered_command::ParsedCommand;
 
 use crate::database::lib::DatabaseHolder;
 use anyhow::{anyhow, ensure};
-pub async fn zadd(
+pub  fn zadd(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,

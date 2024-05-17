@@ -37,17 +37,17 @@ impl Handler {
         let command_name = parsed_command.get_str(0)?.to_uppercase();
         let result = match command_name.as_str() {
             "PING" => ping(parsed_command),
-            "SET" => set(parsed_command, database_holder, db_index).await,
-            "GET" => get(parsed_command, database_holder, db_index).await,
-            "LPUSH" => lpush(parsed_command, database_holder, db_index).await,
-            "RPUSH" => rpush(parsed_command, database_holder, db_index).await,
-            "LPOP" => lpop(parsed_command, database_holder, db_index).await,
-            "RPOP" => rpop(parsed_command, database_holder, db_index).await,
-            "SADD" => sadd(parsed_command, database_holder, db_index).await,
-            "HSET" => hset(parsed_command, database_holder, db_index).await,
-            "ZADD" => zadd(parsed_command, database_holder, db_index).await,
-            "LRANGE" => lrange(parsed_command, database_holder, db_index).await,
-            "INCR" => incr(parsed_command, database_holder, db_index).await,
+            "SET" => set(parsed_command, database_holder, db_index),
+            "GET" => get(parsed_command, database_holder, db_index),
+            "LPUSH" => lpush(parsed_command, database_holder, db_index),
+            "RPUSH" => rpush(parsed_command, database_holder, db_index),
+            "LPOP" => lpop(parsed_command, database_holder, db_index),
+            "RPOP" => rpop(parsed_command, database_holder, db_index),
+            "SADD" => sadd(parsed_command, database_holder, db_index),
+            "HSET" => hset(parsed_command, database_holder, db_index),
+            "ZADD" => zadd(parsed_command, database_holder, db_index),
+            "LRANGE" => lrange(parsed_command, database_holder, db_index),
+            "INCR" => incr(parsed_command, database_holder, db_index),
 
             _ => {
                 info!("{}", command_name);

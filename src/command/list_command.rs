@@ -9,7 +9,7 @@ use crate::vojo::value::Value;
 use crate::vojo::value::ValueList;
 use crate::vojo::value::ValueString;
 use anyhow::{anyhow, ensure};
-pub async fn lpush(
+pub  fn lpush(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -26,7 +26,7 @@ pub async fn lpush(
 
     Ok(Response::Integer(len as i64))
 }
-pub async fn rpush(
+pub  fn rpush(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -43,7 +43,7 @@ pub async fn rpush(
 
     Ok(Response::Integer(len as i64))
 }
-pub async fn lpop(
+pub  fn lpop(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -59,7 +59,7 @@ pub async fn lpop(
     let res = db.lpop(db_index, key, count_option)?;
     Ok(res)
 }
-pub async fn rpop(
+pub  fn rpop(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -75,7 +75,7 @@ pub async fn rpop(
     let res = db.rpop(db_index, key, count_option)?;
     Ok(res)
 }
-pub async fn lrange(
+pub  fn lrange(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,

@@ -6,7 +6,7 @@ use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueString;
-pub async fn set(
+pub  fn set(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
@@ -28,7 +28,7 @@ pub async fn set(
     Ok(Response::Status("OK".to_owned()))
 }
 
-pub async fn get(
+pub  fn get(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
@@ -44,16 +44,16 @@ pub async fn get(
         Ok(Response::Nil)
     }
 }
-pub async fn incr(
+pub  fn incr(
     parser: ParsedCommand,
     db: &mut DatabaseHolder,
     dbindex: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() == 2, "InvalidArgument");
 
-    generic_incr(parser, db, dbindex, 1).await
+    generic_incr(parser, db, dbindex, 1)
 }
-async fn generic_incr(
+ fn generic_incr(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
