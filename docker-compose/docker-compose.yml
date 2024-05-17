@@ -22,7 +22,7 @@ services:
           cpus: "4.0"
           memory: 8192M  
   rcache:
-    image: lsk569937453/rcache:test
+    image: ghcr.io/lsk569937453/rcache:0.0.3
     container_name: rcache
     networks:
       - app-tier
