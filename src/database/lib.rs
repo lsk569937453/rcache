@@ -81,14 +81,15 @@ impl DatabaseHolder {
                 .open(file_path.clone())
                 .await?;
             let lock = self.database_lock.lock().await;
+            let key_len = lock.data[0].len();
+            let data_base=lock.clone();
+            drop(lock);
+
             let current_time = Instant::now();
             let encoded: Vec<u8> ={
-                let data = &*lock;
-                bincode::encode_to_vec(data, config.clone()).unwrap()
+                bincode::encode_to_vec(data_base, config.clone()).unwrap()
             };
-            let key_len = lock.data[0].len();
             let first_cost=current_time.elapsed();
-            drop(lock);
             let _ = file.write_all(&encoded).await;
             info!(
                 "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
