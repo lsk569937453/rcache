@@ -10,27 +10,32 @@ use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
 use crate::Request;
+
 use std::borrow::Cow;
 use std::collections::LinkedList;
 use std::collections::{BTreeSet, HashMap};
 use std::collections::{HashSet, VecDeque};
+use std::ops::Deref;
 
 use super::info::NodeInfo;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
 use arc_swap::ArcSwap;
 use bincode::{config, Decode, Encode};
-use std::sync::Arc;
-use std::time::Duration;
+use fork::daemon;
+use fork::Fork;
 use std::fs::OpenOptions;
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
 use tokio::net::TcpStream;
-use std::sync::Mutex;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
-use tracing_subscriber::fmt::format;use std::io::Write;
+use tracing_subscriber::fmt::format;
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -41,7 +46,7 @@ impl DatabaseHolder {
         loop {
             interval.tick().await;
 
-            let mut lock = self.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
+            let mut lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
@@ -78,24 +83,24 @@ impl DatabaseHolder {
                 .write(true)
                 .create(true)
                 .truncate(true) // Create the file if it does not exist
-                .open(file_path.clone())
-                ?;
-            let lock = self.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
-            let key_len = lock.data[0].len();
-            let data_base=lock.clone();
-            drop(lock);
-            let current_time = Instant::now();
-            let encoded: Vec<u8> ={
-                bincode::encode_to_vec(data_base, config.clone()).unwrap()
-            };
-            let first_cost=current_time.elapsed();
-            let _ = file.write_all(&encoded);
-            info!(
+                .open(file_path.clone())?;
+            let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+            if let Ok(Fork::Child) = daemon(false, false) {
+                let database = lock.deref();
+                let key_len = lock.data[0].len();
+                let current_time = Instant::now();
+                let encoded: Vec<u8> =
+                    { bincode::encode_to_vec(database, config.clone()).unwrap() };
+                let first_cost = current_time.elapsed();
+                let _ = file.write_all(&encoded);
+                info!(
                 "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                 key_len,
                 first_cost.as_millis(),
                 current_time.elapsed().as_millis()
             );
+            }
+            drop(lock);
         }
     }
 }
@@ -129,6 +134,9 @@ impl Database {
             .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
             .get(&key.clone());
         Ok(data)
+    }
+    pub fn get_self(self) -> Self {
+        self
     }
     pub fn insert(
         &mut self,
