@@ -18,6 +18,7 @@ use std::collections::{HashSet, VecDeque};
 use std::ops::Deref;
 
 use super::info::NodeInfo;
+use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
 use arc_swap::ArcSwap;
@@ -37,6 +38,7 @@ use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
 use tracing_subscriber::fmt::format;
+
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -74,6 +76,7 @@ impl DatabaseHolder {
             }
         }
     }
+
     pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(10000));
         let file_path = format!("{}.rdb", "test");
@@ -87,6 +90,8 @@ impl DatabaseHolder {
                 .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             if let Ok(Fork::Child) = fork() {
+                let _worker_guard = setup_logger();
+
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
@@ -95,6 +100,12 @@ impl DatabaseHolder {
                 let first_cost = current_time.elapsed();
                 let _ = file.write_all(&encoded);
                 info!(
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
+                println!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                     key_len,
                     first_cost.as_millis(),

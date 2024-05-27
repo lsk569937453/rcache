@@ -11,18 +11,16 @@ use crate::parser::handler::Handler;
 
 use clap::Parser;
 use std::sync::Arc;
-use tokio::net::TcpListener;
 use std::sync::Mutex;
+use tokio::net::TcpListener;
 use tokio::task;
-use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
-use tracing_appender::rolling;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
+
+mod logger;
 #[macro_use]
 extern crate tracing;
 #[macro_use]
 extern crate anyhow;
+use crate::logger::default_logger::setup_logger;
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Cli {
@@ -31,23 +29,6 @@ struct Cli {
     port: u32,
 }
 
-fn setup_logger() -> Result<WorkerGuard, anyhow::Error> {
-    let app_file = rolling::daily("./logs", "access.log");
-    let (non_blocking_appender, guard) = NonBlockingBuilder::default()
-        .buffered_lines_limit(10)
-        .finish(app_file);
-    let file_layer = tracing_subscriber::fmt::Layer::new()
-        .with_target(true)
-        .with_ansi(false)
-        .with_writer(non_blocking_appender)
-        .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
-
-    tracing_subscriber::registry()
-        .with(file_layer)
-        .with(tracing_subscriber::filter::LevelFilter::TRACE)
-        .init();
-    Ok(guard)
-}
 #[tokio::main]
 
 async fn main() -> Result<(), anyhow::Error> {
