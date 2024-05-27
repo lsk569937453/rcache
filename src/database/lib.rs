@@ -23,6 +23,7 @@ use crate::vojo::value::ValueList;
 use arc_swap::ArcSwap;
 use bincode::{config, Decode, Encode};
 use fork::daemon;
+use fork::fork;
 use fork::Fork;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -85,7 +86,7 @@ impl DatabaseHolder {
                 .truncate(true) // Create the file if it does not exist
                 .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
-            if let Ok(Fork::Child) = daemon(false, false) {
+            if let Ok(Fork::Child) = fork() {
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
@@ -94,11 +95,12 @@ impl DatabaseHolder {
                 let first_cost = current_time.elapsed();
                 let _ = file.write_all(&encoded);
                 info!(
-                "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
-                key_len,
-                first_cost.as_millis(),
-                current_time.elapsed().as_millis()
-            );
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
+                std::process::exit(0);
             }
             drop(lock);
         }
