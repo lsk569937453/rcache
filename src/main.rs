@@ -10,73 +10,61 @@ use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
 
 use clap::Parser;
-use std::sync::{Arc, Mutex};
+use database::common::load_rdb;
+use std::sync::Arc;
+use std::sync::Mutex;
 use tokio::net::TcpListener;
 use tokio::task;
-use tracing_appender::non_blocking::{NonBlockingBuilder, WorkerGuard};
-use tracing_appender::rolling;
-use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::util::SubscriberInitExt;
-use tracing_subscriber::Layer;
+
+mod logger;
 #[macro_use]
 extern crate tracing;
 #[macro_use]
 extern crate anyhow;
+use crate::logger::default_logger::setup_logger;
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Cli {
-    /// The request url,like http://www.google.com
+    /// The port
     #[arg(default_value_t = 6379)]
     port: u32,
+    /// The rdb path
+    #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]
+    rdb_path: Option<String>,
 }
 
-fn setup_logger() -> Result<WorkerGuard, anyhow::Error> {
-    let app_file = rolling::daily("./logs", "access.log");
-    let (non_blocking_appender, guard) = NonBlockingBuilder::default()
-        .buffered_lines_limit(10)
-        .finish(app_file);
-    let file_layer = tracing_subscriber::fmt::Layer::new()
-        .with_target(true)
-        .with_ansi(false)
-        .with_writer(non_blocking_appender)
-        .with_filter(tracing_subscriber::filter::LevelFilter::INFO);
-
-    tracing_subscriber::registry()
-        .with(file_layer)
-        .with(tracing_subscriber::filter::LevelFilter::TRACE)
-        .init();
-    Ok(guard)
-}
 #[tokio::main]
-// The main function of our server. It sets up the logger, starts the database expiration loop,
-// and listens for incoming connections. For each incoming connection, it creates a handler
-// and spawns a new task to handle the connection.
-#[allow(dead_code)]
-async fn main() -> Result<(), anyhow::Error> {
+async fn main() {
+    if let Err(e) = main_with_error().await {
+        println!("{}", e);
+    }
+}
+
+async fn main_with_error() -> Result<(), anyhow::Error> {
     let _worker_guard = setup_logger()?;
     let cli: Cli = Cli::parse();
     let port = cli.port;
     let addr = format!(r#"0.0.0.0:{port}"#);
 
+    let database = if let Some(file_path) = cli.rdb_path {
+        let database = load_rdb(file_path).await?;
+        database
+    } else {
+        Database::new()
+    };
+    // Create a new instance of our database
+    let database_holder = DatabaseHolder {
+        database_lock: Arc::new(Mutex::new(database)),
+    };
+
     // Bind to the specified address and port
     let listener = TcpListener::bind(&addr)
         .await
-        .expect(&format!("Failed to bind to address,{}", addr));
+        .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
 
-    // Create a new instance of our database
-    let database = DatabaseHolder {
-        database_lock: Arc::new(Mutex::new(Database::new())),
-    };
-
     // Spawn a new task that will run the database expiration loop
-    let cloned_database = database.clone();
-    tokio::spawn(async move {
-        if let Err(e) = cloned_database.expire_loop().await {
-            error!("The error is {}", e);
-        }
-    });
-
+    let _ = start_loop(database_holder.clone()).await;
     loop {
         // Accept an incoming connection and get the remote address
         let (socket, _) = listener
@@ -86,7 +74,7 @@ async fn main() -> Result<(), anyhow::Error> {
         let remote_addr = socket.peer_addr()?.to_string();
 
         // Create a new handler and spawn a new task to handle the connection
-        let cloned_database = database.clone();
+        let cloned_database = database_holder.clone();
         let handler = Handler {
             connect: socket,
             database_holder: cloned_database,
@@ -98,7 +86,22 @@ async fn main() -> Result<(), anyhow::Error> {
         });
     }
 }
+pub async fn start_loop(database_holder: DatabaseHolder) -> Result<(), anyhow::Error> {
+    let cloned_database_holder1 = database_holder.clone();
+    let cloned_database_holder2 = database_holder.clone();
 
+    tokio::spawn(async move {
+        if let Err(e) = cloned_database_holder1.expire_loop().await {
+            error!("The error is {}", e);
+        }
+    });
+    tokio::spawn(async move {
+        if let Err(e) = cloned_database_holder2.rdb_save().await {
+            error!("The error is {}", e);
+        }
+    });
+    Ok(())
+}
 #[instrument(skip(handler))]
 async fn handle_connection(
     mut handler: Handler,

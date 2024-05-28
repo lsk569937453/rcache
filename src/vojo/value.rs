@@ -1,12 +1,15 @@
 use crate::parser::response::Response;
 
+use bincode::{config, Decode, Encode};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
 use std::collections::LinkedList;
+use std::collections::VecDeque;
 use std::vec;
-#[derive(PartialEq, Debug)]
+
+#[derive(Encode, Decode, PartialEq, Debug, Clone)]
 pub enum Value {
     /// Nil should not be stored, but it is used as a default for initialized values
     Nil,
@@ -177,7 +180,7 @@ impl Value {
         }
     }
 }
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct ValueString {
     pub data: Vec<u8>,
 }
@@ -186,24 +189,26 @@ impl ValueString {
         self.data.len()
     }
 }
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct ValueList {
-    pub data: LinkedList<Vec<u8>>,
+    pub data: VecDeque<Vec<u8>>,
 }
-#[derive(PartialEq, Debug, Clone)]
+
+#[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct ValueSet {
     pub data: HashSet<Vec<u8>>,
 }
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct ValueHash {
     pub data: HashMap<Vec<u8>, Vec<u8>>,
 }
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Encode, Decode, Clone)]
 pub struct ValueSortedSet {
     // FIXME: Vec<u8> is repeated in memory
     pub data: BTreeSet<SortedSetData>,
 }
-#[derive(Debug)]
+
+#[derive(Debug, Encode, Decode, Clone)]
 
 pub struct SortedSetData {
     pub member: Vec<u8>,

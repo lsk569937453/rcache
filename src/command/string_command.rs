@@ -6,16 +6,13 @@ use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::Value;
 use crate::vojo::value::ValueString;
-pub fn set(
+pub  fn set(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     db_index: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() >= 3, "InvalidArgument");
-    let mut database = database_lock
-        .database_lock
-        .lock()
-        .map_err(|_e| anyhow!(""))?;
+    let mut database = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
     if let Some(value) = database.get(db_index, key.clone())? {
         ensure!(value.is_string(), "InvalidArgument");
@@ -31,16 +28,13 @@ pub fn set(
     Ok(Response::Status("OK".to_owned()))
 }
 
-pub fn get(
+pub  fn get(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() == 2, "InvalidArgument");
-    let database = database_lock
-        .database_lock
-        .lock()
-        .map_err(|_| anyhow!(""))?;
+    let database = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
     let val_option = database.get(dbindex, key)?;
     if let Some(value) = val_option {
@@ -50,7 +44,7 @@ pub fn get(
         Ok(Response::Nil)
     }
 }
-pub fn incr(
+pub  fn incr(
     parser: ParsedCommand,
     db: &mut DatabaseHolder,
     dbindex: usize,
@@ -59,17 +53,14 @@ pub fn incr(
 
     generic_incr(parser, db, dbindex, 1)
 }
-fn generic_incr(
+ fn generic_incr(
     parser: ParsedCommand,
     database_lock: &mut DatabaseHolder,
     dbindex: usize,
     increment: i64,
 ) -> Result<Response, anyhow::Error> {
     ensure!(parser.argv.len() == 2, "InvalidArgument");
-    let mut db = database_lock
-        .database_lock
-        .lock()
-        .map_err(|_| anyhow!(""))?;
+    let mut db = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
     let option_val = db.get(dbindex, key.clone())?;
     if let Some(value) = option_val {

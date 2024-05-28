@@ -1,6 +1,7 @@
 use crate::command::set_command::sadd;
 use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{get, set};
+use crate::database::fs_writer::MyWriter;
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
 
@@ -10,13 +11,25 @@ use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
 use crate::Request;
-use std::collections::HashSet;
+
+use std::borrow::Cow;
 use std::collections::LinkedList;
 use std::collections::{BTreeSet, HashMap};
+use std::collections::{HashSet, VecDeque};
+use std::ops::Deref;
 
+use super::info::NodeInfo;
+use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use std::sync::{Arc, Mutex};
+use bincode::{config, Decode, Encode};
+use fork::daemon;
+use fork::fork;
+use fork::Fork;
+use std::fs::OpenOptions;
+use std::io::Write;
+use std::sync::Arc;
+use std::sync::Mutex;
 use std::time::Duration;
 use tokio::io::AsyncReadExt;
 use tokio::io::AsyncWriteExt;
@@ -24,6 +37,8 @@ use tokio::net::TcpStream;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::interval;
 use tokio::time::Instant;
+use tracing_subscriber::fmt::format;
+
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -33,10 +48,8 @@ impl DatabaseHolder {
         let mut interval = interval(Duration::from_millis(200));
         loop {
             interval.tick().await;
-            let mut lock = self
-                .database_lock
-                .lock()
-                .map_err(|e| anyhow!("Get Lock error ,error is {}", e))?;
+
+            let mut lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
@@ -63,17 +76,68 @@ impl DatabaseHolder {
             }
         }
     }
+
+    pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
+        let mut interval = interval(Duration::from_millis(10000));
+        let file_path = "rcache.rdb";
+        let config = config::standard();
+        loop {
+            interval.tick().await;
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true) // Create the file if it does not exist
+                .open(file_path.clone())?;
+            let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+            if let Ok(Fork::Child) = fork() {
+                println!("1");
+                let _worker_guard = setup_logger();
+                println!("2");
+
+                let database = lock.deref();
+                let key_len = lock.data[0].len();
+                let current_time = Instant::now();
+                let mywriter = MyWriter(file);
+                println!("3");
+
+                let res = bincode::encode_into_writer(database, mywriter, config.clone());
+                if let Err(e) = res {
+                    println!("{}", e);
+                }
+                println!("4");
+
+                let first_cost = current_time.elapsed();
+                info!(
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
+                println!(
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
+                std::process::exit(0);
+            }
+            drop(lock);
+        }
+    }
 }
+#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+
 pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,
+    pub node_info: NodeInfo,
 }
 
 impl Database {
     pub fn new() -> Self {
         let mut data_vec = vec![];
         let mut expire_map = vec![];
-
+        let node_info = NodeInfo::new();
         for _i in 0..16 {
             data_vec.push(HashMap::new());
             expire_map.push(HashMap::new());
@@ -81,6 +145,7 @@ impl Database {
         Database {
             data: data_vec,
             expire_map,
+            node_info,
         }
     }
     pub fn get(&self, db_index: usize, key: Vec<u8>) -> Result<Option<&Value>, anyhow::Error> {
@@ -90,6 +155,9 @@ impl Database {
             .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
             .get(&key.clone());
         Ok(data)
+    }
+    pub fn get_self(self) -> Self {
+        self
     }
     pub fn insert(
         &mut self,
@@ -110,7 +178,7 @@ impl Database {
         value: Vec<u8>,
     ) -> Result<usize, anyhow::Error> {
         let tt = Value::List(ValueList {
-            data: LinkedList::new(),
+            data: VecDeque::new(),
         });
         let value_list = self
             .data
@@ -127,7 +195,7 @@ impl Database {
         value: Vec<u8>,
     ) -> Result<usize, anyhow::Error> {
         let tt = Value::List(ValueList {
-            data: LinkedList::new(),
+            data: VecDeque::new(),
         });
         let value_list = self
             .data

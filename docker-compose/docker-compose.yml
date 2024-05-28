@@ -22,10 +22,12 @@ services:
           cpus: "4.0"
           memory: 8192M  
   rcache:
-    image: ghcr.io/lsk569937453/rcache:0.0.2
+    image: ghcr.io/lsk569937453/rcache:0.0.4
     container_name: rcache
     networks:
       - app-tier
+    ports:
+      - 6379:6379
     deploy:
       resources:
         limits:
