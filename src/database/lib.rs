@@ -1,6 +1,7 @@
 use crate::command::set_command::sadd;
 use crate::command::sorted_set_command::zadd;
 use crate::command::string_command::{get, set};
+use crate::database::fs_writer::MyWriter;
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
 
@@ -21,7 +22,6 @@ use super::info::NodeInfo;
 use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use arc_swap::ArcSwap;
 use bincode::{config, Decode, Encode};
 use fork::daemon;
 use fork::fork;
@@ -95,10 +95,9 @@ impl DatabaseHolder {
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
-                let encoded: Vec<u8> =
-                    { bincode::encode_to_vec(database, config.clone()).unwrap() };
+                let mywriter = MyWriter(file);
+                bincode::encode_into_writer(database, mywriter, config.clone()).unwrap();
                 let first_cost = current_time.elapsed();
-                let _ = file.write_all(&encoded);
                 info!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                     key_len,
