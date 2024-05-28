@@ -1,6 +1,6 @@
 [package]
 name = "rcache"
-version = "0.0.4"
+version = "0.0.5"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
@@ -20,4 +20,5 @@ tokio = { version = "1.32.0", features = ["full"] }
 tracing-appender = "0.2.3"
 tracing-subscriber = "0.3.18"
 tracing = "0.1.4"
+[target.'cfg(not(windows))'.dependencies]
 fork = "0.1.23"

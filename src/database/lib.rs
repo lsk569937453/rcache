@@ -23,8 +23,9 @@ use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
 use bincode::{config, Decode, Encode};
-use fork::daemon;
+#[cfg(not(any(target_os = "windows")))]
 use fork::fork;
+#[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
 use std::fs::OpenOptions;
 use std::io::Write;
@@ -76,7 +77,7 @@ impl DatabaseHolder {
             }
         }
     }
-
+    #[cfg(not(any(target_os = "windows")))]
     pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(10000));
         let file_path = "rcache.rdb";
@@ -90,22 +91,15 @@ impl DatabaseHolder {
                 .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             if let Ok(Fork::Child) = fork() {
-                println!("1");
                 let _worker_guard = setup_logger();
-                println!("2");
-
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
                 let mywriter = MyWriter(file);
-                println!("3");
-
                 let res = bincode::encode_into_writer(database, mywriter, config.clone());
                 if let Err(e) = res {
-                    println!("{}", e);
+                    error!("{}", e);
                 }
-                println!("4");
-
                 let first_cost = current_time.elapsed();
                 info!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
@@ -122,6 +116,46 @@ impl DatabaseHolder {
                 std::process::exit(0);
             }
             drop(lock);
+        }
+    }
+    #[cfg(target_os = "windows")]
+    pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
+        let mut interval = interval(Duration::from_millis(10000));
+        let file_path = "rcache.rdb";
+        let config = config::standard();
+        loop {
+            interval.tick().await;
+            let mut file = OpenOptions::new()
+                .write(true)
+                .create(true)
+                .truncate(true) // Create the file if it does not exist
+                .open(file_path.clone())?;
+            let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+            let database = lock.clone();
+            drop(lock);
+            let _worker_guard = setup_logger();
+
+            let key_len = database.data[0].len();
+            let current_time = Instant::now();
+            let mywriter = MyWriter(file);
+
+            let res = bincode::encode_into_writer(database, mywriter, config.clone());
+            if let Err(e) = res {
+                error!("{}", e);
+            }
+            let first_cost = current_time.elapsed();
+            info!(
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
+            println!(
+                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    key_len,
+                    first_cost.as_millis(),
+                    current_time.elapsed().as_millis()
+                );
         }
     }
 }
