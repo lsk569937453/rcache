@@ -79,7 +79,7 @@ impl DatabaseHolder {
 
     pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(10000));
-        let file_path = format!("{}.rdb", "test");
+        let file_path = "rcache.rdb";
         let config = config::standard();
         loop {
             interval.tick().await;
@@ -90,13 +90,22 @@ impl DatabaseHolder {
                 .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             if let Ok(Fork::Child) = fork() {
+                println!("1");
                 let _worker_guard = setup_logger();
+                println!("2");
 
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
                 let mywriter = MyWriter(file);
-                bincode::encode_into_writer(database, mywriter, config.clone()).unwrap();
+                println!("3");
+
+                let res = bincode::encode_into_writer(database, mywriter, config.clone());
+                if let Err(e) = res {
+                    println!("{}", e);
+                }
+                println!("4");
+
                 let first_cost = current_time.elapsed();
                 info!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",

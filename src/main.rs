@@ -10,6 +10,7 @@ use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
 
 use clap::Parser;
+use database::common::load_rdb;
 use std::sync::Arc;
 use std::sync::Mutex;
 use tokio::net::TcpListener;
@@ -24,29 +25,43 @@ use crate::logger::default_logger::setup_logger;
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Cli {
-    /// The request url,like http://www.google.com
+    /// The port
     #[arg(default_value_t = 6379)]
     port: u32,
+    /// The rdb path
+    #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]
+    rdb_path: Option<String>,
 }
 
 #[tokio::main]
+async fn main() {
+    if let Err(e) = main_with_error().await {
+        println!("{}", e);
+    }
+}
 
-async fn main() -> Result<(), anyhow::Error> {
+async fn main_with_error() -> Result<(), anyhow::Error> {
     let _worker_guard = setup_logger()?;
     let cli: Cli = Cli::parse();
     let port = cli.port;
     let addr = format!(r#"0.0.0.0:{port}"#);
+
+    let database = if let Some(file_path) = cli.rdb_path {
+        let database = load_rdb(file_path).await?;
+        database
+    } else {
+        Database::new()
+    };
+    // Create a new instance of our database
+    let database_holder = DatabaseHolder {
+        database_lock: Arc::new(Mutex::new(database)),
+    };
 
     // Bind to the specified address and port
     let listener = TcpListener::bind(&addr)
         .await
         .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
-
-    // Create a new instance of our database
-    let database_holder = DatabaseHolder {
-        database_lock: Arc::new(Mutex::new(Database::new())),
-    };
 
     // Spawn a new task that will run the database expiration loop
     let _ = start_loop(database_holder.clone()).await;
