@@ -11,10 +11,12 @@ use crate::parser::handler::Handler;
 
 use clap::Parser;
 use database::common::load_rdb;
+use monoio::{
+    io::{AsyncReadRent, AsyncWriteRentExt},
+    net::{TcpListener, TcpStream},
+};
 use std::sync::Arc;
 use std::sync::Mutex;
-use tokio::net::TcpListener;
-use tokio::task;
 
 mod logger;
 #[macro_use]
@@ -33,7 +35,7 @@ struct Cli {
     rdb_path: Option<String>,
 }
 
-#[tokio::main]
+#[monoio::main(threads = 0, timer_enabled = true)]
 async fn main() {
     if let Err(e) = main_with_error().await {
         println!("{}", e);
@@ -58,9 +60,8 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
     };
 
     // Bind to the specified address and port
-    let listener = TcpListener::bind(&addr)
-        .await
-        .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
+    let listener =
+        TcpListener::bind(&addr).map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
 
     // Spawn a new task that will run the database expiration loop
@@ -79,7 +80,7 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
             connect: socket,
             database_holder: cloned_database,
         };
-        task::spawn(async move {
+        monoio::spawn(async move {
             if let Err(e) = handle_connection(handler, remote_addr.clone()).await {
                 info!("The error is {}", e);
             }
@@ -90,12 +91,12 @@ pub async fn start_loop(database_holder: DatabaseHolder) -> Result<(), anyhow::E
     let cloned_database_holder1 = database_holder.clone();
     let cloned_database_holder2 = database_holder.clone();
 
-    tokio::spawn(async move {
+    monoio::spawn(async move {
         if let Err(e) = cloned_database_holder1.expire_loop().await {
             error!("The error is {}", e);
         }
     });
-    tokio::spawn(async move {
+    monoio::spawn(async move {
         if let Err(e) = cloned_database_holder2.rdb_save().await {
             error!("The error is {}", e);
         }

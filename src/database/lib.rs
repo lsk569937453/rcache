@@ -4,13 +4,13 @@ use crate::command::string_command::{get, set};
 use crate::database::fs_writer::MyWriter;
 use crate::parser::ping::ping;
 use crate::parser::response::Response;
-
 use crate::vojo::client::Client;
 use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
 use crate::Request;
+use std::sync::mpsc;
 
 use std::borrow::Cow;
 use std::collections::LinkedList;
@@ -27,19 +27,14 @@ use bincode::{config, Decode, Encode};
 use fork::fork;
 #[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
+use monoio::time::interval;
+use monoio::time::Instant;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
-use tokio::sync::{mpsc, oneshot};
-use tokio::time::interval;
-use tokio::time::Instant;
 use tracing_subscriber::fmt::format;
-
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
@@ -354,7 +349,7 @@ impl Database {
 async fn scan_expire(sender: mpsc::Sender<BackgroundEvent>) {
     let mut tick_stream = interval(Duration::from_millis(1000));
     loop {
-        let _ = sender.send(BackgroundEvent::Nil).await;
+        let _ = sender.send(BackgroundEvent::Nil);
         tick_stream.tick().await;
     }
 }
