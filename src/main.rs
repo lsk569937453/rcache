@@ -23,6 +23,11 @@ mod logger;
 extern crate tracing;
 #[macro_use]
 extern crate anyhow;
+use mimalloc::MiMalloc;
+
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
+
 use crate::logger::default_logger::setup_logger;
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
