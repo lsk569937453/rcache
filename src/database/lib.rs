@@ -27,23 +27,21 @@ use bincode::{config, Decode, Encode};
 use fork::fork;
 #[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
-use monoio::time::interval;
-use monoio::time::Instant;
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::time::Instant;
 use tracing_subscriber::fmt::format;
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
 }
 impl DatabaseHolder {
-    pub async fn expire_loop(&self) -> Result<(), anyhow::Error> {
-        let mut interval = interval(Duration::from_millis(200));
+    pub fn expire_loop(&self) -> Result<(), anyhow::Error> {
         loop {
-            interval.tick().await;
+            std::thread::sleep(Duration::from_millis(200));
 
             let mut lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             let current_time = Instant::now();
@@ -73,18 +71,21 @@ impl DatabaseHolder {
         }
     }
     #[cfg(not(any(target_os = "windows")))]
-    pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
-        let mut interval = interval(Duration::from_millis(10000));
+    pub fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let file_path = "rcache.rdb";
         let config = config::standard();
+        let now = Instant::now();
         loop {
-            interval.tick().await;
-            let mut file = OpenOptions::new()
+            std::thread::sleep(Duration::from_secs(10));
+
+            let file = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true) // Create the file if it does not exist
-                .open(file_path.clone())?;
+                .open(file_path)?;
+
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+
             if let Ok(Fork::Child) = fork() {
                 let _worker_guard = setup_logger();
                 let database = lock.deref();
@@ -103,7 +104,8 @@ impl DatabaseHolder {
                     current_time.elapsed().as_millis()
                 );
                 println!(
-                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    "{:?},Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                    chrono::offset::Local::now(),
                     key_len,
                     first_cost.as_millis(),
                     current_time.elapsed().as_millis()
@@ -347,7 +349,7 @@ impl Database {
 }
 
 async fn scan_expire(sender: mpsc::Sender<BackgroundEvent>) {
-    let mut tick_stream = interval(Duration::from_millis(1000));
+    let mut tick_stream = monoio::time::interval(Duration::from_millis(1000));
     loop {
         let _ = sender.send(BackgroundEvent::Nil);
         tick_stream.tick().await;

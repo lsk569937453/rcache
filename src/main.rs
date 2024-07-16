@@ -15,6 +15,7 @@ use monoio::{
     io::{AsyncReadRent, AsyncWriteRentExt},
     net::{TcpListener, TcpStream},
 };
+use std::collections::HashMap;
 use std::sync::Arc;
 use std::sync::Mutex;
 
@@ -40,29 +41,52 @@ struct Cli {
     rdb_path: Option<String>,
 }
 
-#[monoio::main(threads = 0, timer_enabled = true)]
-async fn main() {
-    if let Err(e) = main_with_error().await {
-        println!("{}", e);
-    }
-}
-
-async fn main_with_error() -> Result<(), anyhow::Error> {
-    let _worker_guard = setup_logger()?;
+fn main() -> Result<(), anyhow::Error> {
     let cli: Cli = Cli::parse();
-    let port = cli.port;
-    let addr = format!(r#"0.0.0.0:{port}"#);
 
     let database = if let Some(file_path) = cli.rdb_path {
-        let database = load_rdb(file_path).await?;
+        let database = load_rdb(file_path)?;
         database
     } else {
         Database::new()
     };
+
     // Create a new instance of our database
     let database_holder = DatabaseHolder {
         database_lock: Arc::new(Mutex::new(database)),
     };
+    let _ = start_loop(database_holder.clone());
+    let port = cli.port;
+    let addr = format!(r#"0.0.0.0:{port}"#);
+    std::thread::scope(|s| {
+        let addr_clone = addr.clone();
+        let database_clone = database_holder.clone();
+        for i in 0..4 {
+            println!("thread is {}", i);
+            let addr_clone1 = addr_clone.clone();
+            let database_clone1 = database_clone.clone();
+            s.spawn(move || {
+                let mut rt = monoio::RuntimeBuilder::<monoio::FusionDriver>::new()
+                    .with_entries(256)
+                    .enable_timer()
+                    .build()
+                    .unwrap();
+                rt.block_on(async {
+                    if let Err(e) = main_with_error(addr_clone1, database_clone1).await {
+                        println!("{}", e);
+                    }
+                });
+            });
+        }
+    });
+    Ok(())
+}
+
+async fn main_with_error(
+    addr: String,
+    database_holder: DatabaseHolder,
+) -> Result<(), anyhow::Error> {
+    let _worker_guard = setup_logger()?;
 
     // Bind to the specified address and port
     let listener =
@@ -70,7 +94,6 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
     info!("Server listening on {}", addr);
 
     // Spawn a new task that will run the database expiration loop
-    let _ = start_loop(database_holder.clone()).await;
     loop {
         // Accept an incoming connection and get the remote address
         let (socket, _) = listener
@@ -92,20 +115,22 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
         });
     }
 }
-pub async fn start_loop(database_holder: DatabaseHolder) -> Result<(), anyhow::Error> {
+pub fn start_loop(database_holder: DatabaseHolder) -> Result<(), anyhow::Error> {
     let cloned_database_holder1 = database_holder.clone();
     let cloned_database_holder2 = database_holder.clone();
 
-    monoio::spawn(async move {
-        if let Err(e) = cloned_database_holder1.expire_loop().await {
+    std::thread::spawn(move || {
+        if let Err(e) = cloned_database_holder1.expire_loop() {
             error!("The error is {}", e);
         }
     });
-    monoio::spawn(async move {
-        if let Err(e) = cloned_database_holder2.rdb_save().await {
+
+    std::thread::spawn(move || {
+        if let Err(e) = cloned_database_holder2.rdb_save() {
             error!("The error is {}", e);
         }
     });
+
     Ok(())
 }
 #[instrument(skip(handler))]
