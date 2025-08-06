@@ -2,23 +2,21 @@
 name = "rcache"
 version = "0.0.6"
 edition = "2021"
-
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "1.0"
-bincode = { version = "2.0.0-rc.3", features = ["derive"] }
-byte-unit = "5.1.4"
-chrono = "0.4.31"
-clap = { version = "4.4.1", features = ["derive"] }
-openssl = { version = "0.10", features = ["vendored"] }
+anyhow = "1.0.98"
+bincode = { version = "2.0.1", features = ["derive"] }
+byte-unit = "5.1.6"
+chrono = "0.4.41"
+clap = { version = "4.5.42", features = ["derive"] }
 prettytable-rs = "^0.10"
-serde_json = "1.0.108"
-skiplist = "0.5.1"
-time = "0.3.36"
-tokio = { version = "1.32.0", features = ["full"] }
+serde_json = "1.0.142"
+skiplist = "0.6.0"
+time = "0.3.41"
+tokio = { version = "1.47.1", features = ["full"] }
+tracing = "0.1.41"
 tracing-appender = "0.2.3"
-tracing-subscriber = "0.3.18"
-tracing = "0.1.4"
+tracing-subscriber = "0.3.19"
 [target.'cfg(not(windows))'.dependencies]
-fork = "0.1.23"
+fork = "0.2.0"

@@ -124,7 +124,7 @@ impl ParsedCommand {
     /// ```
     pub fn get_str(&self, pos: usize) -> Result<&str, anyhow::Error> {
         let data = self.get_slice(pos)?;
-        Ok(from_utf8(&data)?)
+        Ok(from_utf8(data)?)
     }
 
     /// Gets a Vec<u8> from a parameter

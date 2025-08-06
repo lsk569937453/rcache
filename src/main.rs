@@ -4,7 +4,6 @@ mod parser;
 mod util;
 mod vojo;
 use crate::database::lib::Database;
-use crate::parser::request::Request;
 
 use crate::database::lib::DatabaseHolder;
 use crate::parser::handler::Handler;
@@ -36,7 +35,7 @@ struct Cli {
 #[tokio::main]
 async fn main() {
     if let Err(e) = main_with_error().await {
-        println!("{}", e);
+        println!("{e}");
     }
 }
 
@@ -52,28 +51,23 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
     } else {
         Database::new()
     };
-    // Create a new instance of our database
     let database_holder = DatabaseHolder {
         database_lock: Arc::new(Mutex::new(database)),
     };
 
-    // Bind to the specified address and port
     let listener = TcpListener::bind(&addr)
         .await
         .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
 
-    // Spawn a new task that will run the database expiration loop
     let _ = start_loop(database_holder.clone()).await;
     loop {
-        // Accept an incoming connection and get the remote address
         let (socket, _) = listener
             .accept()
             .await
             .expect("Failed to accept incoming connection");
         let remote_addr = socket.peer_addr()?.to_string();
 
-        // Create a new handler and spawn a new task to handle the connection
         let cloned_database = database_holder.clone();
         let handler = Handler {
             connect: socket,

@@ -1,22 +1,12 @@
-use crate::command::set_command::sadd;
-use crate::command::sorted_set_command::zadd;
-use crate::command::string_command::{get, set};
 use crate::database::fs_writer::MyWriter;
-use crate::parser::ping::ping;
 use crate::parser::response::Response;
 
-use crate::vojo::client::Client;
-use crate::vojo::parsered_command::ParsedCommand;
 use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
-use crate::Request;
 
-use std::borrow::Cow;
-use std::collections::LinkedList;
 use std::collections::{BTreeSet, HashMap};
 use std::collections::{HashSet, VecDeque};
-use std::ops::Deref;
 
 use super::info::NodeInfo;
 use crate::logger::default_logger::setup_logger;
@@ -28,17 +18,14 @@ use fork::fork;
 #[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
 use std::fs::OpenOptions;
-use std::io::Write;
+#[cfg(not(any(target_os = "windows")))]
+use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
-use tokio::io::AsyncReadExt;
-use tokio::io::AsyncWriteExt;
-use tokio::net::TcpStream;
-use tokio::sync::{mpsc, oneshot};
+use tokio::sync::mpsc;
 use tokio::time::interval;
 use tokio::time::Instant;
-use tracing_subscriber::fmt::format;
 
 #[derive(Clone)]
 pub struct DatabaseHolder {
@@ -54,7 +41,6 @@ impl DatabaseHolder {
             let current_time = Instant::now();
 
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
-                // Collect keys that have expired
                 let expired_keys: Vec<Vec<u8>> = map
                     .iter()
                     .filter(|(_, &time)| {
@@ -65,7 +51,6 @@ impl DatabaseHolder {
                     .map(|(key, _)| key.clone())
                     .collect();
 
-                // Remove expired keys from the hashmap
                 for key in expired_keys {
                     debug!(
                         "the key |{:?}| in slot {} has been removed",
@@ -87,7 +72,7 @@ impl DatabaseHolder {
             let mut file = OpenOptions::new()
                 .write(true)
                 .create(true)
-                .truncate(true) // Create the file if it does not exist
+                .truncate(true)
                 .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             if let Ok(Fork::Child) = fork() {
@@ -125,11 +110,11 @@ impl DatabaseHolder {
         let config = config::standard();
         loop {
             interval.tick().await;
-            let mut file = OpenOptions::new()
+            let file = OpenOptions::new()
                 .write(true)
                 .create(true)
                 .truncate(true) // Create the file if it does not exist
-                .open(file_path.clone())?;
+                .open(file_path)?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             let database = lock.clone();
             drop(lock);
@@ -139,7 +124,7 @@ impl DatabaseHolder {
             let current_time = Instant::now();
             let mywriter = MyWriter(file);
 
-            let res = bincode::encode_into_writer(database, mywriter, config.clone());
+            let res = bincode::encode_into_writer(database, mywriter, config);
             if let Err(e) = res {
                 error!("{}", e);
             }
@@ -165,6 +150,12 @@ pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,
     pub node_info: NodeInfo,
+}
+
+impl Default for Database {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Database {

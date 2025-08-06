@@ -1,11 +1,10 @@
 use crate::parser::response::Response;
 
-use bincode::{config, Decode, Encode};
+use bincode::{Decode, Encode};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::collections::LinkedList;
 use std::collections::VecDeque;
 use std::vec;
 
@@ -102,11 +101,11 @@ impl Value {
     pub fn hset(&mut self, key: Vec<u8>, value: Vec<u8>) -> Result<bool, anyhow::Error> {
         match self {
             Value::Hash(val) => {
-                if val.data.contains_key(&key) {
-                    Ok(false)
-                } else {
-                    val.data.insert(key, value);
+                if let std::collections::hash_map::Entry::Vacant(e) = val.data.entry(key) {
+                    e.insert(value);
                     Ok(true)
+                } else {
+                    Ok(false)
                 }
             }
             _ => Err(anyhow!("WrongTypeError")),
@@ -204,7 +203,6 @@ pub struct ValueHash {
 }
 #[derive(PartialEq, Debug, Encode, Decode, Clone)]
 pub struct ValueSortedSet {
-    // FIXME: Vec<u8> is repeated in memory
     pub data: BTreeSet<SortedSetData>,
 }
 
