@@ -8,7 +8,7 @@ pub async fn load_rdb(file_path: String) -> Result<Database, anyhow::Error> {
     let file = OpenOptions::new().read(true).open(file_path.clone())?;
     let config = config::standard();
     let my_reader = MyReader(file);
-    let database: Database = bincode::decode_from_reader(my_reader, config.clone())?;
+    let database: Database = bincode::decode_from_reader(my_reader, config)?;
     let key_len = database.data[0].len();
     info!(
         "Rdb file has been loaded,keys count is {},total time cost {}ms",

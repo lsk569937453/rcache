@@ -3,6 +3,12 @@ use bincode::{Decode, Encode};
 pub struct NodeInfo {
     replication: Role,
 }
+impl Default for NodeInfo {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 impl NodeInfo {
     pub fn new() -> Self {
         let master_info = MasterInfo::new();

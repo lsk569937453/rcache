@@ -32,10 +32,7 @@ impl Request {
         pos += 1;
         let len = input.len();
         let (argco, intlen) = parse_int(&input[pos..len], len - pos, "multibulk")?;
-        let argc = match argco {
-            Some(i) => i,
-            None => 0,
-        };
+        let argc = argco.unwrap_or_default();
         pos += intlen;
         if argc > 1024 * 1024 {
             return Err(anyhow!("invalid multibulk length".to_owned(),));
@@ -90,7 +87,7 @@ fn parse_int(
             }
             argco = None;
             break;
-        } else if c < '0' || c > '9' {
+        } else if !c.is_ascii_digit() {
             return Err(anyhow!(format!("invalid {} length", name)));
         }
         argc *= 10;
