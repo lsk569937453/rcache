@@ -225,18 +225,14 @@ impl PartialOrd for SortedSetData {
 }
 impl Ord for SortedSetData {
     fn cmp(&self, other: &Self) -> Ordering {
-        // First, compare the scores
         match self.score.partial_cmp(&other.score) {
             Some(ordering) => {
-                // If scores are different, return the ordering
                 if ordering != Ordering::Equal {
                     return ordering;
                 }
             }
-            None => return Ordering::Less, // Handle NaN cases
+            None => return Ordering::Less,
         }
-
-        // If scores are equal, compare the members
         self.member.cmp(&other.member)
     }
 }
