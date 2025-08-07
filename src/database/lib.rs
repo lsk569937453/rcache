@@ -4,6 +4,9 @@ use crate::parser::response::Response;
 use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
 use crate::vojo::value::{ValueSet, ValueSortedSet};
+use chrono::TimeZone;
+use chrono::Utc;
+use std::time::SystemTime;
 
 use std::collections::{BTreeSet, HashMap};
 use std::collections::{HashSet, VecDeque};
@@ -23,6 +26,7 @@ use std::ops::Deref;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use std::time::UNIX_EPOCH;
 use tokio::sync::mpsc;
 use tokio::time::interval;
 use tokio::time::Instant;
@@ -173,7 +177,10 @@ impl Database {
             node_info,
         }
     }
-    pub fn get(&self, db_index: usize, key: Vec<u8>) -> Result<Option<&Value>, anyhow::Error> {
+    pub fn get(&mut self, db_index: usize, key: Vec<u8>) -> Result<Option<&Value>, anyhow::Error> {
+        if self.is_expired(db_index, &key)? {
+            return Ok(None);
+        }
         let data = self
             .data
             .get(db_index)
@@ -190,6 +197,10 @@ impl Database {
         key: Vec<u8>,
         value: Value,
     ) -> Result<(), anyhow::Error> {
+        self.expire_map
+            .get_mut(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .remove(&key);
         self.data
             .get_mut(db_index)
             .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
@@ -202,6 +213,7 @@ impl Database {
         key: Vec<u8>,
         value: Vec<u8>,
     ) -> Result<usize, anyhow::Error> {
+        self.is_expired(db_index, &key)?;
         let tt = Value::List(ValueList {
             data: VecDeque::new(),
         });
@@ -339,6 +351,99 @@ impl Database {
                 })
             });
         value_set.hset(field, value)
+    }
+    fn is_expired(&mut self, db_index: usize, key: &[u8]) -> Result<bool, anyhow::Error> {
+        let expire_time = self
+            .expire_map
+            .get(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .get(key);
+
+        if let Some(expiry) = expire_time {
+            if Utc::now().timestamp() > *expiry {
+                self.data
+                    .get_mut(db_index)
+                    .ok_or(anyhow!("Invalid DB index"))?
+                    .remove(key);
+                self.expire_map
+                    .get_mut(db_index)
+                    .ok_or(anyhow!("Invalid DB index"))?
+                    .remove(key);
+                return Ok(true);
+            }
+        }
+        Ok(false)
+    }
+    pub fn remove(&mut self, db_index: usize, key: &[u8]) -> Result<Option<Value>, anyhow::Error> {
+        if self.is_expired(db_index, key)? {
+            return Ok(None);
+        }
+
+        self.expire_map
+            .get_mut(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .remove(key);
+
+        let value = self
+            .data
+            .get_mut(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .remove(key);
+
+        Ok(value)
+    }
+    pub fn contains_key(&mut self, db_index: usize, key: &[u8]) -> Result<bool, anyhow::Error> {
+        if self.is_expired(db_index, key)? {
+            return Ok(false);
+        }
+        Ok(self.data[db_index].contains_key(key))
+    }
+
+    pub fn keys(&self, db_index: usize) -> Result<Vec<Vec<u8>>, anyhow::Error> {
+        let keys = self
+            .data
+            .get(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .keys()
+            .cloned()
+            .collect();
+        Ok(keys)
+    }
+
+    pub fn set_expire(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        seconds: u64,
+    ) -> Result<bool, anyhow::Error> {
+        if !self.data[db_index].contains_key(&key) {
+            return Ok(false); // 键不存在，返回 0 (false)
+        }
+
+        let future_time = SystemTime::now() + Duration::from_secs(seconds);
+        let expire_at = future_time.duration_since(UNIX_EPOCH)?.as_millis() as i64;
+        self.expire_map
+            .get_mut(db_index)
+            .ok_or_else(|| anyhow!("Invalid DB index"))?
+            .insert(key, expire_at);
+
+        Ok(true)
+    }
+
+    pub fn get_ttl(&mut self, db_index: usize, key: &[u8]) -> Result<i64, anyhow::Error> {
+        if !self.contains_key(db_index, key)? {
+            return Ok(-2);
+        }
+
+        match self.expire_map[db_index].get(key) {
+            Some(expire_at) => {
+                let future_time = Utc.timestamp_millis_opt(*expire_at).unwrap();
+                let now = Utc::now();
+                let duration = future_time.signed_duration_since(now);
+                Ok(duration.as_seconds_f32() as i64)
+            }
+            None => Ok(-1),
+        }
     }
 }
 

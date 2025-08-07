@@ -1,8 +1,8 @@
-use crate::command::hash_command::hset;
-use crate::command::list_command::{lpop, lpush, lrange, rpop, rpush};
-use crate::command::set_command::sadd;
-use crate::command::sorted_set_command::zadd;
-use crate::command::string_command::{get, incr, set};
+use crate::command::hash_command::*;
+use crate::command::list_command::*;
+use crate::command::set_command::*;
+use crate::command::sorted_set_command::*;
+use crate::command::string_command::*;
 use crate::database::lib::DatabaseHolder;
 use crate::parser::ping::ping;
 use crate::parser::request::Request;
@@ -48,7 +48,15 @@ impl Handler {
             "ZADD" => zadd(parsed_command, database_holder, db_index),
             "LRANGE" => lrange(parsed_command, database_holder, db_index),
             "INCR" => incr(parsed_command, database_holder, db_index),
+            "DEL" => del(parsed_command, database_holder, db_index),
+            "EXISTS" => exists(parsed_command, database_holder, db_index),
 
+            "HGET" => hget(parsed_command, database_holder, db_index),
+            "HGETALL" => hgetall(parsed_command, database_holder, db_index),
+            "SMEMBERS" => smembers(parsed_command, database_holder, db_index),
+
+            "EXPIRE" => expire(parsed_command, database_holder, db_index),
+            "TTL" => ttl(parsed_command, database_holder, db_index),
             _ => {
                 info!("{}", command_name);
                 Ok(Response::Nil)
