@@ -133,13 +133,7 @@ impl DatabaseHolder {
                 error!("{}", e);
             }
             let first_cost = current_time.elapsed();
-            info!(
-                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
-                    key_len,
-                    first_cost.as_millis(),
-                    current_time.elapsed().as_millis()
-                );
-            println!(
+            debug!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
                     key_len,
                     first_cost.as_millis(),
