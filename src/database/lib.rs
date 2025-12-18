@@ -15,11 +15,11 @@ use super::info::NodeInfo;
 use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use bincode::{config, Decode, Encode};
-#[cfg(not(any(target_os = "windows")))]
-use fork::fork;
+use bincode::{Decode, Encode, config};
 #[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
+#[cfg(not(any(target_os = "windows")))]
+use fork::fork;
 use std::fs::OpenOptions;
 #[cfg(not(any(target_os = "windows")))]
 use std::ops::Deref;
@@ -28,8 +28,8 @@ use std::sync::Mutex;
 use std::time::Duration;
 use std::time::UNIX_EPOCH;
 use tokio::sync::mpsc;
-use tokio::time::interval;
 use tokio::time::Instant;
+use tokio::time::interval;
 
 #[derive(Clone)]
 pub struct DatabaseHolder {
@@ -47,8 +47,8 @@ impl DatabaseHolder {
             for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
                 let expired_keys: Vec<Vec<u8>> = map
                     .iter()
-                    .filter(|(_, &time)| {
-                        let time_duration = Duration::from_secs(time as u64);
+                    .filter(|(_, time)| {
+                        let time_duration = Duration::from_secs(**time as u64);
                         let expiration_time = current_time.checked_sub(time_duration);
                         expiration_time.is_none() // If the expiration time is None, it's expired
                     })
@@ -134,11 +134,11 @@ impl DatabaseHolder {
             }
             let first_cost = current_time.elapsed();
             debug!(
-                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
-                    key_len,
-                    first_cost.as_millis(),
-                    current_time.elapsed().as_millis()
-                );
+                "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                key_len,
+                first_cost.as_millis(),
+                current_time.elapsed().as_millis()
+            );
         }
     }
 }

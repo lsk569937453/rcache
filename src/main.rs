@@ -62,10 +62,7 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
 
     let _ = start_loop(database_holder.clone()).await;
     loop {
-        let (socket, _) = listener
-            .accept()
-            .await
-            .expect("Failed to accept incoming connection");
+        let (socket, _) = listener.accept().await?;
         let remote_addr = socket.peer_addr()?.to_string();
 
         let cloned_database = database_holder.clone();
