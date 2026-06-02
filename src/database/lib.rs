@@ -3,7 +3,7 @@ use crate::parser::response::Response;
 
 use crate::vojo::value::BackgroundEvent;
 use crate::vojo::value::Value;
-use crate::vojo::value::{ValueSet, ValueSortedSet};
+use crate::vojo::value::{ValueSet, ValueSortedSet, ValueString};
 
 use std::collections::{BTreeSet, HashMap};
 use std::collections::{HashSet, VecDeque};
@@ -339,6 +339,205 @@ impl Database {
                 })
             });
         value_set.hset(field, value)
+    }
+    pub fn remove(&mut self, db_index: usize, key: Vec<u8>) -> Result<bool, anyhow::Error> {
+        let removed = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .remove(&key);
+        Ok(removed.is_some())
+    }
+    pub fn append(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<usize, anyhow::Error> {
+        let map = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        match map.entry(key) {
+            std::collections::hash_map::Entry::Occupied(mut e) => {
+                let v = e.get_mut();
+                if !v.is_string() {
+                    return Err(anyhow::anyhow!("WrongTypeError"));
+                }
+                v.append(value)
+            }
+            std::collections::hash_map::Entry::Vacant(e) => {
+                let len = value.len();
+                e.insert(Value::String(ValueString { data: value }));
+                Ok(len)
+            }
+        }
+    }
+    pub fn strlen(&self, db_index: usize, key: Vec<u8>) -> Result<usize, anyhow::Error> {
+        let value = self.get(db_index, key)?;
+        match value {
+            Some(v) => v.strlen(),
+            None => Ok(0),
+        }
+    }
+    pub fn srem(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        match value_option {
+            Some(v) => v.srem(value),
+            None => Err(anyhow::anyhow!("no such key")),
+        }
+    }
+    pub fn sismember(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.sismember(&value),
+            None => Ok(false),
+        }
+    }
+    pub fn scard(&self, db_index: usize, key: Vec<u8>) -> Result<usize, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.scard(),
+            None => Ok(0),
+        }
+    }
+    pub fn smembers(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+    ) -> Result<Vec<Vec<u8>>, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.smembers(),
+            None => Ok(vec![]),
+        }
+    }
+    pub fn hget(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+        field: Vec<u8>,
+    ) -> Result<Option<Vec<u8>>, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.hget(&field),
+            None => Ok(None),
+        }
+    }
+    pub fn hdel(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        field: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        match value_option {
+            Some(v) => v.hdel(&field),
+            None => Ok(false),
+        }
+    }
+    pub fn hexists(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+        field: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.hexists(&field),
+            None => Ok(false),
+        }
+    }
+    pub fn hlen(&self, db_index: usize, key: Vec<u8>) -> Result<usize, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.hlen(),
+            None => Ok(0),
+        }
+    }
+    pub fn hgetall(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+    ) -> Result<Vec<(Vec<u8>, Vec<u8>)>, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.hgetall(),
+            None => Ok(vec![]),
+        }
+    }
+    pub fn zrange(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+        start: i64,
+        stop: i64,
+    ) -> Result<Vec<Vec<u8>>, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.zrange(start, stop),
+            None => Ok(vec![]),
+        }
+    }
+    pub fn zrem(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        member: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let value_option = self
+            .data
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?
+            .get_mut(&key);
+        match value_option {
+            Some(v) => v.zrem(&member),
+            None => Ok(false),
+        }
+    }
+    pub fn zcard(&self, db_index: usize, key: Vec<u8>) -> Result<usize, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.zcard(),
+            None => Ok(0),
+        }
+    }
+    pub fn zscore(
+        &self,
+        db_index: usize,
+        key: Vec<u8>,
+        member: Vec<u8>,
+    ) -> Result<Option<f64>, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.zscore(&member),
+            None => Ok(None),
+        }
+    }
+    pub fn llen(&self, db_index: usize, key: Vec<u8>) -> Result<usize, anyhow::Error> {
+        let value_option = self.get(db_index, key)?;
+        match value_option {
+            Some(v) => v.llen(),
+            None => Ok(0),
+        }
     }
 }
 

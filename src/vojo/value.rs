@@ -178,6 +178,125 @@ impl Value {
             _ => Err(anyhow!("WrongTypeError")),
         }
     }
+    pub fn llen(&self) -> Result<usize, anyhow::Error> {
+        match self {
+            Value::List(val) => Ok(val.data.len()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    // Set operations
+    pub fn srem(&mut self, value: Vec<u8>) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::Set(val) => Ok(val.data.remove(&value)),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn sismember(&self, value: &[u8]) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::Set(val) => Ok(val.data.contains(value)),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn scard(&self) -> Result<usize, anyhow::Error> {
+        match self {
+            Value::Set(val) => Ok(val.data.len()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn smembers(&self) -> Result<Vec<Vec<u8>>, anyhow::Error> {
+        match self {
+            Value::Set(val) => Ok(val.data.iter().cloned().collect()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    // Hash operations
+    pub fn hget(&self, field: &[u8]) -> Result<Option<Vec<u8>>, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.data.get(field).cloned()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn hdel(&mut self, field: &[u8]) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.data.remove(field).is_some()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn hexists(&self, field: &[u8]) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.data.contains_key(field)),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn hlen(&self) -> Result<usize, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.data.len()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn hgetall(&self) -> Result<Vec<(Vec<u8>, Vec<u8>)>, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.data.iter().map(|(k, v)| (k.clone(), v.clone())).collect()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    // Sorted Set operations
+    pub fn zrange(&self, start: i64, stop: i64) -> Result<Vec<Vec<u8>>, anyhow::Error> {
+        match self {
+            Value::SortedSet(val) => {
+                let data: Vec<_> = val.data.iter().collect();
+                let len = data.len() as i64;
+                let start = if start < 0 {
+                    (len + start).max(0)
+                } else {
+                    start
+                };
+                let stop = if stop < 0 {
+                    (len + stop).max(-1)
+                } else {
+                    stop.min(len - 1)
+                };
+                if start > stop {
+                    return Ok(vec![]);
+                }
+                let result: Vec<Vec<u8>> = data[start as usize..=(stop as usize)]
+                    .iter()
+                    .map(|s| s.member.clone())
+                    .collect();
+                Ok(result)
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn zrem(&mut self, member: &[u8]) -> Result<bool, anyhow::Error> {
+        match self {
+            Value::SortedSet(val) => {
+                let original_len = val.data.len();
+                val.data.retain(|s| s.member != member);
+                Ok(val.data.len() != original_len)
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn zcard(&self) -> Result<usize, anyhow::Error> {
+        match self {
+            Value::SortedSet(val) => Ok(val.data.len()),
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
+    pub fn zscore(&self, member: &[u8]) -> Result<Option<f64>, anyhow::Error> {
+        match self {
+            Value::SortedSet(val) => {
+                for item in &val.data {
+                    if item.member == member {
+                        return Ok(Some(item.score));
+                    }
+                }
+                Ok(None)
+            }
+            _ => Err(anyhow!("WrongTypeError")),
+        }
+    }
 }
 #[derive(PartialEq, Debug, Clone, Encode, Decode)]
 pub struct ValueString {
