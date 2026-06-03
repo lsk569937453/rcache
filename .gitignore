@@ -21,3 +21,4 @@ logs
 .rdb
 *.rdb
 .idea
+*.py

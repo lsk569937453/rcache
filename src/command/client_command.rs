@@ -77,8 +77,35 @@ pub fn client_id(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
     Ok(Response::Integer(1))
 }
 
+/// CLIENT TRACKING <on|off> [OPTIN|OPTOUT...]
+/// Enable/disable client-side caching
+pub fn client_tracking(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
+    if cmd.argv.len() < 2 {
+        error!("CLIENT TRACKING: wrong number of arguments (expected >= 2, got {})", cmd.argv.len());
+        return Err(anyhow!("ERR wrong number of arguments for 'CLIENT|TRACKING' command"));
+    }
+    let option = cmd.get_str(2)?;
+    let option_upper = option.to_uppercase();
+    info!("CLIENT TRACKING: processing tracking option '{}'", option);
+
+    match option_upper.as_str() {
+        "ON" | "OFF" => {
+            // Accept ON/OFF but don't implement actual tracking
+            Ok(Response::Status("OK".to_owned()))
+        }
+        "OPTIN" | "OPTOUT" => {
+            // Accept caching modes
+            Ok(Response::Status("OK".to_owned()))
+        }
+        _ => {
+            error!("CLIENT TRACKING: unknown option '{}'", option);
+            Err(anyhow!("ERR syntax error"))
+        }
+    }
+}
+
 /// CLIENT CACHE <option>
-/// Client tracking related commands
+/// Client caching related commands
 pub fn client_cache(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
     if cmd.argv.len() < 2 {
         error!("CLIENT CACHE: wrong number of arguments (expected >= 2, got {})", cmd.argv.len());
@@ -138,6 +165,7 @@ pub fn client_command(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
         "SETINFO" => client_setinfo(cmd),
         "NOOP" => client_noop(cmd),
         "ID" => client_id(cmd),
+        "TRACKING" => client_tracking(cmd),
         "CACHE" => client_cache(cmd),
         "GETINFO" => client_getinfo(cmd),
         "KILL" => client_kill(cmd),
