@@ -25,7 +25,7 @@ use crate::logger::default_logger::setup_logger;
 #[command(author, version, about, long_about)]
 struct Cli {
     /// The port
-    #[arg(default_value_t = 6379)]
+    #[arg(default_value_t = 6370)]
     port: u32,
     /// The rdb path
     #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]
@@ -62,10 +62,7 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
 
     let _ = start_loop(database_holder.clone()).await;
     loop {
-        let (socket, _) = listener
-            .accept()
-            .await
-            .expect("Failed to accept incoming connection");
+        let (socket, _) = listener.accept().await?;
         let remote_addr = socket.peer_addr()?.to_string();
 
         let cloned_database = database_holder.clone();

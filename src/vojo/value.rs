@@ -31,12 +31,27 @@ impl Value {
     pub fn is_set(&self) -> bool {
         matches!(self, Value::Set(_))
     }
+    pub fn is_hash(&self) -> bool {
+        matches!(self, Value::Hash(_))
+    }
     pub fn is_sorted_set(&self) -> bool {
         matches!(self, Value::SortedSet(_))
     }
     pub fn to_value_string(&self) -> Result<ValueString, anyhow::Error> {
         match self {
             Value::String(val) => Ok(val.clone()),
+            _ => Err(anyhow!("convert Error!")),
+        }
+    }
+    pub fn to_value_hash(&self) -> Result<ValueHash, anyhow::Error> {
+        match self {
+            Value::Hash(val) => Ok(val.clone()),
+            _ => Err(anyhow!("convert Error!")),
+        }
+    }
+    pub fn to_value_set(&self) -> Result<ValueSet, anyhow::Error> {
+        match self {
+            Value::Set(val) => Ok(val.clone()),
             _ => Err(anyhow!("convert Error!")),
         }
     }

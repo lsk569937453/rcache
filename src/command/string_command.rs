@@ -360,3 +360,40 @@ pub  fn type_cmd(
     };
     Ok(Response::Status(type_str.to_owned()))
 }
+
+/// DBSIZE - Return the number of keys in the current database
+pub fn dbsize(
+    parser: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 1, "InvalidArgument");
+    let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+    let key_count = db.data[db_index].len();
+    Ok(Response::Integer(key_count as i64))
+}
+
+/// KEYS - Return all keys matching the pattern
+/// Currently only supports "*" pattern (all keys)
+pub fn keys(
+    parser: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 2, "InvalidArgument");
+    let pattern = parser.get_str(1)?;
+
+    // Currently only support "*" pattern
+    if pattern != "*" {
+        return Ok(Response::Array(vec![])); // Empty array for unsupported patterns
+    }
+
+    let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+    let keys: Vec<Response> = db.data[db_index]
+        .keys()
+        .map(|key| Response::Data(key.clone()))
+        .collect();
+
+    Ok(Response::Array(keys))
+}
+

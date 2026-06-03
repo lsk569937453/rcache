@@ -1,15 +1,18 @@
+use crate::command::client_command::client_command;
+use crate::command::connection_command::{auth, hello, select_db};
 use crate::command::hash_command::{hdel, hget, hgetall, hexists, hlen, hset};
 use crate::command::list_command::{llen, lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::{sadd, scard, sismember, smembers, srem};
 use crate::command::sorted_set_command::{zadd, zcard, zrange, zrem, zscore};
 use crate::command::string_command::{
-    append, decr, decrby, del, exists, get, getdel, getrange, getset, incr, incrby,
-    incrbyfloat, mget, mset, msetnx, set, strlen, type_cmd,
+    append, dbsize, decr, decrby, del, exists, get, getdel, getrange, getset, incr, incrby,
+    incrbyfloat, keys, mget, mset, msetnx, set, strlen, type_cmd,
 };
 use crate::database::lib::DatabaseHolder;
 use crate::parser::ping::ping;
 use crate::parser::request::Request;
 use crate::parser::response::Response;
+use crate::vojo::parsered_command::ParsedCommand;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
@@ -19,27 +22,22 @@ pub struct Handler {
 }
 
 impl Handler {
-    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
-        let mut buf = vec![0u8; 1024];
-        let parsed_command = match self.connect.read(&mut buf).await {
-            Ok(0) => {
-                info!("Connection closed by client");
-                return Err(anyhow!(""));
-            }
-            Ok(_) => {
-                let (parsed_command, _) = Request::parse_buf(&buf)?;
-                parsed_command
-            }
-            Err(err) => {
-                error!("Error reading data from socket: {}", err);
-                return Err(anyhow!(""));
-            }
+    /// Process a single command and return its response
+    fn process_command(parsed_command: ParsedCommand, db_index: usize, database_holder: &mut DatabaseHolder) -> Response {
+        let command_name = match parsed_command.get_str(0) {
+            Ok(name) => name.to_uppercase(),
+            Err(_) => return Response::Error("ERR invalid command".to_string()),
         };
-        let db_index = 0;
-        let database_holder = &mut self.database_holder;
-        let command_name = parsed_command.get_str(0)?.to_uppercase();
+
+        info!("Received command: {}", command_name);
+
         let result = match command_name.as_str() {
             "PING" => ping(parsed_command),
+            // Connection commands
+            "HELLO" => hello(parsed_command),
+            "AUTH" => auth(parsed_command),
+            "SELECT" => select_db(parsed_command),
+            "CLIENT" => client_command(parsed_command),
             // String commands
             "SET" => set(parsed_command, database_holder, db_index),
             "GET" => get(parsed_command, database_holder, db_index),
@@ -60,6 +58,8 @@ impl Handler {
             "DEL" => del(parsed_command, database_holder, db_index),
             "EXISTS" => exists(parsed_command, database_holder, db_index),
             "TYPE" => type_cmd(parsed_command, database_holder, db_index),
+            "DBSIZE" => dbsize(parsed_command, database_holder, db_index),
+            "KEYS" => keys(parsed_command, database_holder, db_index),
             // List commands
             "LPUSH" => lpush(parsed_command, database_holder, db_index),
             "RPUSH" => rpush(parsed_command, database_holder, db_index),
@@ -88,18 +88,56 @@ impl Handler {
             "ZSCORE" => zscore(parsed_command, database_holder, db_index),
 
             _ => {
-                info!("{}", command_name);
-                Ok(Response::Nil)
+                info!("Unknown command: {}", command_name);
+                Err(anyhow!("ERR unknown command '{}'", command_name))
             }
         };
-        let data = match result {
+
+        match result {
             Ok(r) => r,
             Err(r) => {
                 error!("The error is {}", r);
                 Response::Error(r.to_string())
             }
+        }
+    }
+
+    pub async fn run(&mut self) -> Result<(), anyhow::Error> {
+        let mut buf = vec![0u8; 8192];
+
+        // Read data once
+        let n = match self.connect.read(&mut buf).await {
+            Ok(0) => {
+                info!("Connection closed by client");
+                return Err(anyhow!(""));
+            }
+            Ok(n) => n,
+            Err(err) => {
+                error!("Error reading data from socket: {}", err);
+                return Err(anyhow!(""));
+            }
         };
-        self.connect.write_all(&data.as_bytes()).await?;
+
+        // Resize buffer to actual data read
+        buf.truncate(n);
+
+        // Parse all commands (pipeline support)
+        let commands = Request::parse_all(&buf)?;
+
+        let db_index = 0;
+        let mut responses = Vec::new();
+
+        // Process each command and collect responses
+        for parsed_command in commands {
+            let response = Self::process_command(parsed_command, db_index, &mut self.database_holder);
+            responses.push(response.as_bytes());
+        }
+
+        // Send all responses
+        for response_bytes in responses {
+            self.connect.write_all(&response_bytes).await?;
+        }
+
         Ok(())
     }
 }

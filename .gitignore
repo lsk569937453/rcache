@@ -19,3 +19,6 @@ rcache
 /target
 logs
 .rdb
+*.rdb
+.idea
+*.py
