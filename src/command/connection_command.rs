@@ -1,3 +1,4 @@
+use crate::database::lib::DatabaseHolder;
 use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use anyhow::anyhow;
@@ -84,4 +85,29 @@ pub fn select_db(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
 
     // Accept the SELECT command
     Ok(Response::Status("OK".to_owned()))
+}
+
+/// INFO [section]
+/// Return server information and statistics.
+/// Supported sections: server, keyspace, all (default)
+pub fn info(
+    cmd: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+
+    let section = if cmd.argv.len() >= 2 {
+        cmd.get_str(1)?.to_lowercase()
+    } else {
+        "all".to_string()
+    };
+
+    let info_text = match section.as_str() {
+        "server" => db.node_info.build_server_section(),
+        "keyspace" => crate::database::info::NodeInfo::build_keyspace_section(&db, db_index),
+        _ => db.node_info.build_info(&db, db_index),
+    };
+
+    Ok(Response::Data(info_text.as_bytes().to_vec()))
 }

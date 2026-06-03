@@ -1,4 +1,5 @@
 use anyhow::{anyhow, ensure};
+use chrono::Utc;
 
 use crate::database::lib::DatabaseHolder;
 use crate::parser::response::Response;
@@ -395,5 +396,35 @@ pub fn keys(
         .collect();
 
     Ok(Response::Array(keys))
+}
+
+/// EXPIRE key seconds — Set a timeout on a key
+/// Returns 1 if the timeout was set, 0 if the key does not exist
+pub fn expire(
+    parser: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 3, "wrong number of arguments for 'expire' command");
+    let mut db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+    let key = parser.get_vec(1)?;
+    let seconds = parser.get_i64(2)?;
+    let expire_at = Utc::now().timestamp() + seconds;
+    let result = db.set_expire(db_index, key, expire_at)?;
+    Ok(Response::Integer(if result { 1 } else { 0 }))
+}
+
+/// TTL key — Get the remaining time to live of a key in seconds
+/// Returns -2 if the key does not exist, -1 if no expiration, or remaining seconds
+pub fn ttl(
+    parser: ParsedCommand,
+    database_lock: &mut DatabaseHolder,
+    db_index: usize,
+) -> Result<Response, anyhow::Error> {
+    ensure!(parser.argv.len() == 2, "wrong number of arguments for 'ttl' command");
+    let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+    let key = parser.get_vec(1)?;
+    let remaining = db.get_ttl(db_index, key)?;
+    Ok(Response::Integer(remaining))
 }
 

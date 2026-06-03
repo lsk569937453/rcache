@@ -1,12 +1,12 @@
 use crate::command::client_command::client_command;
-use crate::command::connection_command::{auth, hello, select_db};
+use crate::command::connection_command::{auth, hello, info, select_db};
 use crate::command::hash_command::{hdel, hget, hgetall, hexists, hlen, hset};
 use crate::command::list_command::{llen, lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::{sadd, scard, sismember, smembers, srem};
 use crate::command::sorted_set_command::{zadd, zcard, zrange, zrem, zscore};
 use crate::command::string_command::{
-    append, dbsize, decr, decrby, del, exists, get, getdel, getrange, getset, incr, incrby,
-    incrbyfloat, keys, mget, mset, msetnx, set, strlen, type_cmd,
+    append, dbsize, decr, decrby, del, exists, expire, get, getdel, getrange, getset, incr,
+    incrby, incrbyfloat, keys, mget, mset, msetnx, set, strlen, ttl, type_cmd,
 };
 use crate::database::lib::DatabaseHolder;
 use crate::parser::ping::ping;
@@ -38,6 +38,7 @@ impl Handler {
             "AUTH" => auth(parsed_command),
             "SELECT" => select_db(parsed_command),
             "CLIENT" => client_command(parsed_command),
+            "INFO" => info(parsed_command, database_holder, db_index),
             // String commands
             "SET" => set(parsed_command, database_holder, db_index),
             "GET" => get(parsed_command, database_holder, db_index),
@@ -60,6 +61,8 @@ impl Handler {
             "TYPE" => type_cmd(parsed_command, database_holder, db_index),
             "DBSIZE" => dbsize(parsed_command, database_holder, db_index),
             "KEYS" => keys(parsed_command, database_holder, db_index),
+            "EXPIRE" => expire(parsed_command, database_holder, db_index),
+            "TTL" => ttl(parsed_command, database_holder, db_index),
             // List commands
             "LPUSH" => lpush(parsed_command, database_holder, db_index),
             "RPUSH" => rpush(parsed_command, database_holder, db_index),

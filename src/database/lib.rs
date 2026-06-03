@@ -13,6 +13,7 @@ use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
 use bincode::{config, Decode, Encode};
+use chrono::Utc;
 #[cfg(not(any(target_os = "windows")))]
 use fork::fork;
 #[cfg(not(any(target_os = "windows")))]
@@ -38,26 +39,28 @@ impl DatabaseHolder {
             interval.tick().await;
 
             let mut lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
-            let current_time = Instant::now();
+            let current_timestamp = Utc::now().timestamp();
 
-            for (index, map) in &mut lock.expire_map.iter_mut().enumerate() {
-                let expired_keys: Vec<Vec<u8>> = map
-                    .iter()
-                    .filter(|(_, &time)| {
-                        let time_duration = Duration::from_secs(time as u64);
-                        let expiration_time = current_time.checked_sub(time_duration);
-                        expiration_time.is_none() // If the expiration time is None, it's expired
-                    })
-                    .map(|(key, _)| key.clone())
-                    .collect();
+            let expired_keys_by_index: Vec<Vec<Vec<u8>>> = lock
+                .expire_map
+                .iter()
+                .map(|map| {
+                    map.iter()
+                        .filter(|(_, &expire_at)| expire_at <= current_timestamp)
+                        .map(|(key, _)| key.clone())
+                        .collect()
+                })
+                .collect();
 
-                for key in expired_keys {
+            for (index, expired_keys) in expired_keys_by_index.into_iter().enumerate() {
+                for key in &expired_keys {
                     debug!(
                         "the key |{:?}| in slot {} has been removed",
                         key.clone(),
                         index
                     );
-                    map.remove(&key);
+                    lock.expire_map[index].remove(key);
+                    lock.data[index].remove(key);
                 }
             }
         }
@@ -538,6 +541,72 @@ impl Database {
             Some(v) => v.llen(),
             None => Ok(0),
         }
+    }
+    /// Set expiration on a key. expire_at is a Unix timestamp in seconds.
+    /// Returns true if set successfully, false if the key does not exist.
+    pub fn set_expire(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+        expire_at: i64,
+    ) -> Result<bool, anyhow::Error> {
+        let data_map = self
+            .data
+            .get(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        if !data_map.contains_key(&key) {
+            return Ok(false);
+        }
+        let expire_map = self
+            .expire_map
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        expire_map.insert(key, expire_at);
+        Ok(true)
+    }
+    /// Get the remaining TTL of a key in seconds.
+    /// Returns -2 if the key does not exist, -1 if no expiration is set,
+    /// or the remaining seconds otherwise.
+    pub fn get_ttl(&self, db_index: usize, key: Vec<u8>) -> Result<i64, anyhow::Error> {
+        let data_map = self
+            .data
+            .get(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        if !data_map.contains_key(&key) {
+            return Ok(-2);
+        }
+        let expire_map = self
+            .expire_map
+            .get(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        match expire_map.get(&key) {
+            Some(&expire_at) => {
+                let current_timestamp = Utc::now().timestamp();
+                let remaining = expire_at - current_timestamp;
+                Ok(remaining.max(0))
+            }
+            None => Ok(-1),
+        }
+    }
+    /// Remove expiration from a key.
+    /// Returns true if removed, false if the key does not exist or has no expiration.
+    pub fn remove_expire(
+        &mut self,
+        db_index: usize,
+        key: Vec<u8>,
+    ) -> Result<bool, anyhow::Error> {
+        let data_map = self
+            .data
+            .get(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        if !data_map.contains_key(&key) {
+            return Ok(false);
+        }
+        let expire_map = self
+            .expire_map
+            .get_mut(db_index)
+            .ok_or(anyhow::anyhow!("can not find db index-{}", db_index))?;
+        Ok(expire_map.remove(&key).is_some())
     }
 }
 
