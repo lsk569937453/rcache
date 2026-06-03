@@ -20,3 +20,4 @@ rcache
 logs
 .rdb
 *.rdb
+.idea

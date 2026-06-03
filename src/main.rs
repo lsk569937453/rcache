@@ -25,7 +25,7 @@ use crate::logger::default_logger::setup_logger;
 #[command(author, version, about, long_about)]
 struct Cli {
     /// The port
-    #[arg(default_value_t = 6379)]
+    #[arg(default_value_t = 6370)]
     port: u32,
     /// The rdb path
     #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]

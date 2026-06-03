@@ -1,3 +1,4 @@
+use crate::command::client_command::client_command;
 use crate::command::hash_command::{hdel, hget, hgetall, hexists, hlen, hset};
 use crate::command::list_command::{llen, lpop, lpush, lrange, rpop, rpush};
 use crate::command::set_command::{sadd, scard, sismember, smembers, srem};
@@ -38,8 +39,10 @@ impl Handler {
         let db_index = 0;
         let database_holder = &mut self.database_holder;
         let command_name = parsed_command.get_str(0)?.to_uppercase();
+        info!("Received command: {}", command_name);
         let result = match command_name.as_str() {
             "PING" => ping(parsed_command),
+            "CLIENT" => client_command(parsed_command),
             // String commands
             "SET" => set(parsed_command, database_holder, db_index),
             "GET" => get(parsed_command, database_holder, db_index),
@@ -88,8 +91,8 @@ impl Handler {
             "ZSCORE" => zscore(parsed_command, database_holder, db_index),
 
             _ => {
-                info!("{}", command_name);
-                Ok(Response::Nil)
+                info!("Unknown command: {}", command_name);
+                Err(anyhow!("ERR unknown command '{}'", command_name))
             }
         };
         let data = match result {
