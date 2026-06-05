@@ -1,3 +1,4 @@
+mod cluster;
 mod command;
 mod database;
 mod parser;
@@ -20,7 +21,11 @@ mod logger;
 extern crate tracing;
 #[macro_use]
 extern crate anyhow;
+use crate::cluster::gossip;
+use crate::cluster::state::{ClusterHolder, ClusterState};
 use crate::logger::default_logger::setup_logger;
+use chrono::Utc;
+
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Cli {
@@ -30,6 +35,12 @@ struct Cli {
     /// The rdb path
     #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]
     rdb_path: Option<String>,
+    /// Enable cluster mode
+    #[arg(long = "cluster-enabled")]
+    cluster_enabled: bool,
+    /// Cluster node timeout in milliseconds
+    #[arg(long = "cluster-node-timeout", default_value_t = 15000)]
+    cluster_node_timeout: u64,
 }
 
 #[tokio::main]
@@ -55,20 +66,57 @@ async fn main_with_error() -> Result<(), anyhow::Error> {
         database_lock: Arc::new(Mutex::new(database)),
     };
 
+    // Initialize cluster state if enabled
+    let cluster_holder = if cli.cluster_enabled {
+        let self_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port).parse()?;
+        let timestamp = Utc::now().timestamp();
+        let state = ClusterState::new(self_addr, timestamp);
+        let holder = ClusterHolder::new(state);
+        info!(
+            "Cluster mode enabled, node ID: {}",
+            {
+                let s = holder.state.read().await;
+                s.my_id().to_string()
+            }
+        );
+        Some(holder)
+    } else {
+        None
+    };
+
     let listener = TcpListener::bind(&addr)
         .await
         .map_err(|_| anyhow!("Failed to bind to address,{}", addr))?;
     info!("Server listening on {}", addr);
 
     let _ = start_loop(database_holder.clone()).await;
+
+    // Start gossip tasks if cluster mode is enabled
+    if let Some(ref ch) = cluster_holder {
+        // Start cluster bus listener
+        let bus_holder = ch.clone();
+        let bus_port = port as u16 + 10000;
+        tokio::spawn(async move {
+            gossip::start_gossip_listener(bus_holder, bus_port).await;
+        });
+
+        // Start gossip loop
+        let gossip_holder = ch.clone();
+        tokio::spawn(async move {
+            gossip::start_gossip_loop(gossip_holder).await;
+        });
+    }
+
     loop {
         let (socket, _) = listener.accept().await?;
         let remote_addr = socket.peer_addr()?.to_string();
 
         let cloned_database = database_holder.clone();
+        let cloned_cluster = cluster_holder.clone();
         let handler = Handler {
             connect: socket,
             database_holder: cloned_database,
+            cluster_holder: cloned_cluster,
         };
         task::spawn(async move {
             if let Err(e) = handle_connection(handler, remote_addr.clone()).await {
