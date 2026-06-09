@@ -1,0 +1,13 @@
+server:
+  port: 6370
+  cluster_enabled: false
+  cluster_node_timeout: 15000
+
+persistence:
+  rdb_path: "rcache.rdb"
+  aof_enabled: false
+  aof_path: "rcache.aof"
+  aof_sync_policy: "everysec"    # always / everysec / no
+
+memory:
+  maxmemory: "0"                 # "0" = unlimited, e.g. "256mb", "1gb"

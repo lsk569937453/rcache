@@ -32,6 +32,32 @@ impl NodeInfo {
         sections.join("\r\n")
     }
 
+    pub fn build_info_with_memory(
+        &self,
+        db: &Database,
+        db_index: usize,
+        used_memory: usize,
+        max_memory: usize,
+    ) -> String {
+        let mut sections = Vec::new();
+        sections.push(self.build_server_section());
+        sections.push(Self::build_memory_section(used_memory, max_memory));
+        sections.push(Self::build_keyspace_section(db, db_index));
+        sections.join("\r\n")
+    }
+
+    pub fn build_memory_section(used_memory: usize, max_memory: usize) -> String {
+        let max_str = if max_memory == 0 {
+            "unlimited".to_string()
+        } else {
+            format!("{}bytes", max_memory)
+        };
+        format!(
+            "# Memory\r\nused_memory:{}\r\nmaxmemory:{}",
+            used_memory, max_str
+        )
+    }
+
     pub fn build_server_section(&self) -> String {
         let uptime = Utc::now().timestamp() - self.start_time;
         let role = match &self.replication {

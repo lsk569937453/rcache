@@ -1,6 +1,7 @@
 use anyhow::{anyhow, ensure};
 
 use crate::database::lib::DatabaseHolder;
+use crate::database::lru::estimate_value_memory;
 use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 
@@ -12,6 +13,9 @@ pub  fn hset(
     ensure!(parser.argv.len() > 3, "InvalidArgument");
     let mut db = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
     let mut len = 0;
     for i in 0..(parser.argv.len() - 2) / 2 {
         let field = parser.get_vec(2 * i + 2)?;
@@ -20,7 +24,14 @@ pub  fn hset(
             len += 1;
         }
     }
-
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
+    database_lock.evict_if_needed()?;
     Ok(Response::Integer(len as i64))
 }
 pub  fn hget(
@@ -32,7 +43,9 @@ pub  fn hget(
     let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
     let field = parser.get_vec(2)?;
-    let result = db.hget(db_index, key, field)?;
+    let result = db.hget(db_index, key.clone(), field)?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     match result {
         Some(v) => Ok(Response::Data(v)),
         None => Ok(Response::Nil),
@@ -46,7 +59,9 @@ pub  fn hgetall(
     ensure!(parser.argv.len() == 2, "InvalidArgument");
     let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
-    let pairs = db.hgetall(db_index, key)?;
+    let pairs = db.hgetall(db_index, key.clone())?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     let mut responses = vec![];
     for (field, value) in pairs {
         responses.push(Response::Data(field));
@@ -62,6 +77,9 @@ pub  fn hdel(
     ensure!(parser.argv.len() >= 3, "InvalidArgument");
     let mut db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
     let mut count = 0;
     for i in 2..parser.argv.len() {
         let field = parser.get_vec(i)?;
@@ -69,6 +87,13 @@ pub  fn hdel(
             count += 1;
         }
     }
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
     Ok(Response::Integer(count))
 }
 pub  fn hexists(
@@ -80,7 +105,9 @@ pub  fn hexists(
     let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
     let field = parser.get_vec(2)?;
-    let result = db.hexists(db_index, key, field)?;
+    let result = db.hexists(db_index, key.clone(), field)?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     if result {
         Ok(Response::Integer(1))
     } else {
@@ -95,6 +122,8 @@ pub  fn hlen(
     ensure!(parser.argv.len() == 2, "InvalidArgument");
     let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
-    let len = db.hlen(db_index, key)?;
+    let len = db.hlen(db_index, key.clone())?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     Ok(Response::Integer(len as i64))
 }

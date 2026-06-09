@@ -19,6 +19,36 @@ use crate::vojo::parsered_command::ParsedCommand;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
 
+/// Check if a command is a write command (should be logged to AOF)
+fn is_write_command(cmd: &str) -> bool {
+    matches!(
+        cmd,
+        "SET"
+            | "APPEND"
+            | "INCR"
+            | "DECR"
+            | "INCRBY"
+            | "DECRBY"
+            | "INCRBYFLOAT"
+            | "GETSET"
+            | "GETDEL"
+            | "MSET"
+            | "MSETNX"
+            | "DEL"
+            | "EXPIRE"
+            | "LPUSH"
+            | "RPUSH"
+            | "LPOP"
+            | "RPOP"
+            | "SADD"
+            | "SREM"
+            | "HSET"
+            | "HDEL"
+            | "ZADD"
+            | "ZREM"
+    )
+}
+
 pub struct Handler {
     pub connect: TcpStream,
     pub database_holder: DatabaseHolder,
@@ -148,11 +178,18 @@ impl Handler {
 
         // Process each command and collect responses
         for parsed_command in commands {
-            // Extract command name for cluster routing check
+            // Extract command name for cluster routing check and AOF logging
             let command_name = parsed_command
                 .get_str(0)
                 .unwrap_or("")
                 .to_uppercase();
+
+            // Save RESP bytes for AOF before the command is consumed
+            let resp_bytes = if is_write_command(&command_name) {
+                Some(parsed_command.get_data())
+            } else {
+                None
+            };
 
             // Cluster routing check for key-based commands
             if let Some(ref mut ch) = self.cluster_holder {
@@ -176,6 +213,17 @@ impl Handler {
                 &mut self.cluster_holder,
             )
             .await;
+
+            // Log to AOF if this was a successful write command
+            let is_error = matches!(&response, Response::Error(_));
+            if !is_error {
+                if let Some(bytes) = resp_bytes {
+                    if let Err(e) = self.database_holder.log_to_aof(&bytes) {
+                        error!("Failed to log to AOF: {}", e);
+                    }
+                }
+            }
+
             responses.push(response.as_bytes());
         }
 

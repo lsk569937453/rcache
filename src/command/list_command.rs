@@ -1,5 +1,6 @@
 
 use crate::database::lib::DatabaseHolder;
+use crate::database::lru::estimate_value_memory;
 use crate::parser::response::Response;
 use crate::vojo::parsered_command::ParsedCommand;
 use anyhow::{anyhow, ensure};
@@ -11,13 +12,23 @@ pub  fn lpush(
     ensure!(parser.argv.len() > 2, "InvalidArgument");
     let mut db = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
 
     let mut len = 0;
     for i in 2..parser.argv.len() {
         let val = parser.get_vec(i)?;
         len = db.lpush(db_index, key.clone(), val)?;
     }
-
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
+    database_lock.evict_if_needed()?;
     Ok(Response::Integer(len as i64))
 }
 pub  fn rpush(
@@ -28,13 +39,23 @@ pub  fn rpush(
     ensure!(parser.argv.len() > 2, "InvalidArgument");
     let mut db = database_lock.database_lock.lock().map_err(|e|anyhow!("{}",e))?;
     let key = parser.get_vec(1)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
 
     let mut len = 0;
     for i in 2..parser.argv.len() {
         let val = parser.get_vec(i)?;
         len = db.rpush(db_index, key.clone(), val)?;
     }
-
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
+    database_lock.evict_if_needed()?;
     Ok(Response::Integer(len as i64))
 }
 pub  fn lpop(
@@ -50,7 +71,17 @@ pub  fn lpop(
     } else {
         None
     };
-    let res = db.lpop(db_index, key, count_option)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    let res = db.lpop(db_index, key.clone(), count_option)?;
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
     Ok(res)
 }
 pub  fn rpop(
@@ -66,7 +97,17 @@ pub  fn rpop(
     } else {
         None
     };
-    let res = db.rpop(db_index, key, count_option)?;
+    let old_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    let res = db.rpop(db_index, key.clone(), count_option)?;
+    let new_mem = db.get(db_index, key.clone())?
+        .map(|v| estimate_value_memory(v))
+        .unwrap_or(0);
+    drop(db);
+    database_lock.memory_sub(old_mem);
+    database_lock.memory_add(new_mem);
+    database_lock.lru_touch(db_index, &key);
     Ok(res)
 }
 pub  fn lrange(
@@ -83,7 +124,9 @@ pub  fn lrange(
     if start > stop {
         return Err(anyhow!("InvalidArgument"));
     }
-    let res = db.lrange(db_index, key, start, stop)?;
+    let res = db.lrange(db_index, key.clone(), start, stop)?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     Ok(res)
 }
 pub  fn llen(
@@ -94,6 +137,8 @@ pub  fn llen(
     ensure!(parser.argv.len() == 2, "InvalidArgument");
     let db = database_lock.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
     let key = parser.get_vec(1)?;
-    let len = db.llen(db_index, key)?;
+    let len = db.llen(db_index, key.clone())?;
+    drop(db);
+    database_lock.lru_touch(db_index, &key);
     Ok(Response::Integer(len as i64))
 }

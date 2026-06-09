@@ -1,15 +1,17 @@
 mod cluster;
 mod command;
+mod config;
 mod database;
 mod parser;
 mod util;
 mod vojo;
 use crate::database::lib::Database;
 
-use crate::database::lib::DatabaseHolder;
+use crate::database::lib::{DatabaseHolder, LruState};
 use crate::parser::handler::Handler;
 
 use clap::Parser;
+use config::AppConfig;
 use database::common::load_rdb;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -29,18 +31,9 @@ use chrono::Utc;
 #[derive(Parser)]
 #[command(author, version, about, long_about)]
 struct Cli {
-    /// The port
-    #[arg(default_value_t = 6370)]
-    port: u32,
-    /// The rdb path
-    #[arg(short = 'r', long = "rdb_path", value_name = "rdb path")]
-    rdb_path: Option<String>,
-    /// Enable cluster mode
-    #[arg(long = "cluster-enabled")]
-    cluster_enabled: bool,
-    /// Cluster node timeout in milliseconds
-    #[arg(long = "cluster-node-timeout", default_value_t = 15000)]
-    cluster_node_timeout: u64,
+    /// Config file path (YAML)
+    #[arg(short = 'f', long = "config", value_name = "FILE")]
+    config: String,
 }
 
 #[tokio::main]
@@ -53,21 +46,63 @@ async fn main() {
 async fn main_with_error() -> Result<(), anyhow::Error> {
     let _worker_guard = setup_logger()?;
     let cli: Cli = Cli::parse();
-    let port = cli.port;
+    let app_config = AppConfig::load(&cli.config)?;
+    info!("Loaded config from: {}", cli.config);
+
+    let port = app_config.server.port;
     let addr = format!(r#"0.0.0.0:{port}"#);
 
-    let database = if let Some(file_path) = cli.rdb_path {
-        let database = load_rdb(file_path).await?;
-        database
+    // Load database: RDB first, then AOF on top (AOF is more complete)
+    let mut database = if let Some(ref rdb_path) = app_config.persistence.rdb_path {
+        let path = rdb_path.clone();
+        if std::path::Path::new(&path).exists() {
+            load_rdb(path).await?
+        } else {
+            Database::new()
+        }
     } else {
         Database::new()
     };
-    let database_holder = DatabaseHolder {
-        database_lock: Arc::new(Mutex::new(database)),
+
+    // Initialize LRU trackers and memory tracker
+    let max_memory = app_config.max_memory_bytes();
+    let mut lru_trackers = vec![];
+    for _ in 0..16 {
+        lru_trackers.push(crate::database::lru::LruTracker::new());
+    }
+    let lru_state = LruState {
+        lru_trackers,
+        memory_tracker: crate::database::lru::MemoryTracker::new(max_memory),
     };
 
+    // Load AOF if enabled and file exists
+    let aof_writer = if app_config.persistence.aof_enabled {
+        let aof_path = app_config.aof_path_buf();
+        if aof_path.exists() {
+            info!("Loading AOF file: {:?}", aof_path);
+            crate::database::aof::load_aof(&aof_path, &mut database)?;
+            info!("AOF loaded successfully");
+        }
+        let writer = crate::database::aof::AofWriter::new(
+            app_config.persistence.aof_path.clone(),
+            crate::database::aof::parse_sync_policy(&app_config.persistence.aof_sync_policy),
+        )?;
+        Some(Arc::new(writer))
+    } else {
+        None
+    };
+
+    let database_holder = DatabaseHolder {
+        database_lock: Arc::new(Mutex::new(database)),
+        aof_writer,
+        lru_state: Arc::new(Mutex::new(lru_state)),
+    };
+
+    // Initialize LRU tracking for existing keys (from RDB/AOF)
+    database_holder.init_lru_from_database();
+
     // Initialize cluster state if enabled
-    let cluster_holder = if cli.cluster_enabled {
+    let cluster_holder = if app_config.server.cluster_enabled {
         let self_addr: std::net::SocketAddr = format!("0.0.0.0:{}", port).parse()?;
         let timestamp = Utc::now().timestamp();
         let state = ClusterState::new(self_addr, timestamp);

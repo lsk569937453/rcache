@@ -110,8 +110,17 @@ impl Request {
                 return Err(anyhow!("Incomplete request"));
             }
         }
-        // Return ParsedCommand with full input data and consumed bytes (from start_pos)
-        Ok((ParsedCommand::new(input.to_vec(), argv), pos - start_pos))
+        // Return ParsedCommand with only this command's bytes (slice from start_pos to pos).
+        // Adjust Argument positions to be relative to the sliced data.
+        let cmd_bytes = input[start_pos..pos].to_vec();
+        let adjusted_argv: Vec<Argument> = argv
+            .into_iter()
+            .map(|mut arg| {
+                arg.pos -= start_pos;
+                arg
+            })
+            .collect();
+        Ok((ParsedCommand::new(cmd_bytes, adjusted_argv), pos - start_pos))
     }
 
     /// Parse a single command (original method, used for single command parsing)

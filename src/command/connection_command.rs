@@ -109,7 +109,7 @@ pub fn select_db(cmd: ParsedCommand) -> Result<Response, anyhow::Error> {
 
 /// INFO [section]
 /// Return server information and statistics.
-/// Supported sections: server, keyspace, cluster, all (default)
+/// Supported sections: server, memory, keyspace, cluster, all (default)
 pub fn info(
     cmd: ParsedCommand,
     database_lock: &mut DatabaseHolder,
@@ -121,6 +121,11 @@ pub fn info(
         .lock()
         .map_err(|e| anyhow!("{}", e))?;
 
+    let (used_memory, max_memory) = {
+        let lru = database_lock.lru_state.lock().map_err(|e| anyhow!("{}", e))?;
+        (lru.memory_tracker.used_memory(), lru.memory_tracker.max_memory())
+    };
+
     let section = if cmd.argv.len() >= 2 {
         cmd.get_str(1)?.to_lowercase()
     } else {
@@ -129,11 +134,13 @@ pub fn info(
 
     let info_text = match section.as_str() {
         "server" => db.node_info.build_server_section(),
+        "memory" => crate::database::info::NodeInfo::build_memory_section(used_memory, max_memory),
         "keyspace" => crate::database::info::NodeInfo::build_keyspace_section(&db, db_index),
         "cluster" => build_cluster_info_section(cluster_holder),
         _ => {
             let mut sections = vec![
                 db.node_info.build_server_section(),
+                crate::database::info::NodeInfo::build_memory_section(used_memory, max_memory),
                 crate::database::info::NodeInfo::build_keyspace_section(&db, db_index),
             ];
             if cluster_holder.is_some() {

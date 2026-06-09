@@ -1,4 +1,6 @@
 use crate::database::fs_writer::MyWriter;
+use crate::database::lru::{estimate_value_memory, LruTracker, MemoryTracker};
+use crate::database::aof::AofWriter;
 use crate::parser::response::Response;
 
 use crate::vojo::value::BackgroundEvent;
@@ -28,11 +30,128 @@ use tokio::sync::mpsc;
 use tokio::time::interval;
 use tokio::time::Instant;
 
+/// LRU and memory tracking state, kept separate from Database
+/// to preserve RDB serialization compatibility.
+pub struct LruState {
+    pub lru_trackers: Vec<LruTracker>,
+    pub memory_tracker: MemoryTracker,
+}
+
 #[derive(Clone)]
 pub struct DatabaseHolder {
     pub database_lock: Arc<Mutex<Database>>,
+    pub aof_writer: Option<Arc<AofWriter>>,
+    pub lru_state: Arc<Mutex<LruState>>,
 }
 impl DatabaseHolder {
+    /// Log a write command to AOF if AOF is enabled.
+    pub fn log_to_aof(&self, resp_bytes: &[u8]) -> Result<(), anyhow::Error> {
+        if let Some(ref writer) = self.aof_writer {
+            writer.append(resp_bytes)?;
+        }
+        Ok(())
+    }
+
+    /// Initialize LRU trackers to match the current database keys.
+    /// Called after loading RDB or AOF.
+    pub fn init_lru_from_database(&self) {
+        let db = self.database_lock.lock().unwrap();
+        let mut state = self.lru_state.lock().unwrap();
+        // Track existing keys and estimate memory
+        for shard_idx in 0..db.data.len() {
+            for (key, value) in &db.data[shard_idx] {
+                state.lru_trackers[shard_idx].touch(key);
+                let mem = estimate_value_memory(value);
+                state.memory_tracker.add(mem);
+            }
+        }
+    }
+
+    /// Touch a key for LRU tracking (record access).
+    pub fn lru_touch(&self, db_index: usize, key: &[u8]) {
+        if let Ok(mut state) = self.lru_state.lock() {
+            if let Some(tracker) = state.lru_trackers.get_mut(db_index) {
+                tracker.touch(key);
+            }
+        }
+    }
+
+    /// Remove a key from LRU tracking.
+    pub fn lru_remove(&self, db_index: usize, key: &[u8]) {
+        if let Ok(mut state) = self.lru_state.lock() {
+            if let Some(tracker) = state.lru_trackers.get_mut(db_index) {
+                tracker.remove(key);
+            }
+        }
+    }
+
+    /// Add to memory usage estimate.
+    pub fn memory_add(&self, bytes: usize) {
+        if let Ok(mut state) = self.lru_state.lock() {
+            state.memory_tracker.add(bytes);
+        }
+    }
+
+    /// Subtract from memory usage estimate.
+    pub fn memory_sub(&self, bytes: usize) {
+        if let Ok(mut state) = self.lru_state.lock() {
+            state.memory_tracker.sub(bytes);
+        }
+    }
+
+    /// Check if memory is over limit.
+    pub fn is_memory_over_limit(&self) -> bool {
+        if let Ok(state) = self.lru_state.lock() {
+            state.memory_tracker.is_over_limit()
+        } else {
+            false
+        }
+    }
+
+    /// Evict keys until memory usage is below the limit.
+    /// IMPORTANT: caller must NOT hold database_lock or lru_state lock.
+    pub fn evict_if_needed(&self) -> Result<(), anyhow::Error> {
+        loop {
+            // Check if eviction is needed
+            {
+                let state = self.lru_state.lock().map_err(|e| anyhow!("{}", e))?;
+                if !state.memory_tracker.is_over_limit() {
+                    return Ok(());
+                }
+            }
+
+            // Find the global LRU key across all shards
+            let evict_info = {
+                let state = self.lru_state.lock().map_err(|e| anyhow!("{}", e))?;
+                let mut best: Option<(u64, usize, Vec<u8>)> = None;
+                for (idx, tracker) in state.lru_trackers.iter().enumerate() {
+                    if let Some((clock, key)) = tracker.lru_key_with_clock() {
+                        match &best {
+                            Some(b) if clock >= b.0 => {}
+                            _ => best = Some((clock, idx, key.clone())),
+                        }
+                    }
+                }
+                best
+            };
+
+            match evict_info {
+                Some((_, shard_idx, key)) => {
+                    // Remove from database and LRU
+                    let mut db = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
+                    if let Some(value) = db.data[shard_idx].remove(&key) {
+                        let mem = estimate_value_memory(&value);
+                        self.memory_sub(mem);
+                    }
+                    db.expire_map[shard_idx].remove(&key);
+                    drop(db);
+                    self.lru_remove(shard_idx, &key);
+                    info!("LRU evicted key {:?} from shard {}", key, shard_idx);
+                }
+                None => return Ok(()), // no keys to evict
+            }
+        }
+    }
     pub async fn expire_loop(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(200));
         loop {
@@ -59,8 +178,18 @@ impl DatabaseHolder {
                         key.clone(),
                         index
                     );
+                    // Estimate memory before removing
+                    let mem = lock.data[index]
+                        .get(key)
+                        .map(|v| estimate_value_memory(v))
+                        .unwrap_or(0);
                     lock.expire_map[index].remove(key);
                     lock.data[index].remove(key);
+                    // Update LRU and memory tracking
+                    self.memory_sub(mem);
+                    drop(lock);
+                    self.lru_remove(index, key);
+                    lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
                 }
             }
         }
