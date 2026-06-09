@@ -20,9 +20,9 @@ services:
       resources:
         limits:
           cpus: "4.0"
-          memory: 8192M  
+          memory: 8192M
   rcache:
-    image: ghcr.io/lsk569937453/rcache:0.0.4
+    image: 'ghcr.io/lsk569937453/rcache:0.0.4'
     container_name: rcache
     networks:
       - app-tier
@@ -32,7 +32,85 @@ services:
       resources:
         limits:
           cpus: "4.0"
-          memory: 8192M 
+          memory: 8192M
+
+  # === Cluster mode: 3 nodes ===
+  rcache-cluster-node1:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: rcache-cluster-node1
+    command: ["./rcache", "--port", "6370", "--cluster-enabled"]
+    networks:
+      - app-tier
+    ports:
+      - 7370:6370   # client port
+      - 17370:16370 # cluster bus port
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+
+  rcache-cluster-node2:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: rcache-cluster-node2
+    command: ["./rcache", "--port", "6370", "--cluster-enabled"]
+    networks:
+      - app-tier
+    ports:
+      - 7371:6370   # client port
+      - 17371:16370 # cluster bus port
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+
+  rcache-cluster-node3:
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    container_name: rcache-cluster-node3
+    command: ["./rcache", "--port", "6370", "--cluster-enabled"]
+    networks:
+      - app-tier
+    ports:
+      - 7372:6370   # client port
+      - 17372:16370 # cluster bus port
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4096M
+
+  # Initialize the cluster after all nodes are up
+  rcache-cluster-init:
+    image: redis:7.2.3
+    container_name: rcache-cluster-init
+    networks:
+      - app-tier
+    depends_on:
+      - rcache-cluster-node1
+      - rcache-cluster-node2
+      - rcache-cluster-node3
+    entrypoint: []
+    command: >
+      sh -c "
+        echo 'Waiting for nodes to start...' &&
+        sleep 3 &&
+        echo 'Setting up cluster on node1...' &&
+        redis-cli -h rcache-cluster-node1 -p 6370 CLUSTER MEET rcache-cluster-node2 6370 &&
+        redis-cli -h rcache-cluster-node1 -p 6370 CLUSTER MEET rcache-cluster-node3 6370 &&
+        redis-cli -h rcache-cluster-node1 -p 6370 CLUSTER ADDSLOTS 0-5461 &&
+        redis-cli -h rcache-cluster-node2 -p 6370 CLUSTER ADDSLOTS 5462-10922 &&
+        redis-cli -h rcache-cluster-node3 -p 6370 CLUSTER ADDSLOTS 10923-16383 &&
+        redis-cli -h rcache-cluster-node1 -p 6370 CLUSTER INFO &&
+        echo 'Cluster initialized!'
+      "
+
 networks:
   app-tier:
     driver: bridge
