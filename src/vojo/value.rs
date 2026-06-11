@@ -1,6 +1,6 @@
 use crate::parser::response::Response;
 
-use bincode::{Decode, Encode};
+use rkyv::{Archive, Deserialize, Serialize};
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::collections::HashMap;
@@ -8,7 +8,8 @@ use std::collections::HashSet;
 use std::collections::VecDeque;
 use std::vec;
 
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub enum Value {
     /// Nil should not be stored, but it is used as a default for initialized values
     Nil,
@@ -313,7 +314,8 @@ impl Value {
         }
     }
 }
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ValueString {
     pub data: Vec<u8>,
 }
@@ -322,26 +324,30 @@ impl ValueString {
         self.data.len()
     }
 }
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ValueList {
     pub data: VecDeque<Vec<u8>>,
 }
 
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ValueSet {
     pub data: HashSet<Vec<u8>>,
 }
-#[derive(PartialEq, Debug, Clone, Encode, Decode)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ValueHash {
     pub data: HashMap<Vec<u8>, Vec<u8>>,
 }
-#[derive(PartialEq, Debug, Encode, Decode, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct ValueSortedSet {
     pub data: BTreeSet<SortedSetData>,
 }
 
-#[derive(Debug, Encode, Decode, Clone)]
-
+#[derive(Debug, Archive, Serialize, Deserialize, Clone)]
+#[rkyv(derive(Debug))]
 pub struct SortedSetData {
     pub member: Vec<u8>,
     pub score: f64,
@@ -368,5 +374,37 @@ impl Ord for SortedSetData {
             None => return Ordering::Less,
         }
         self.member.cmp(&other.member)
+    }
+}
+
+// rkyv generates `ArchivedSortedSetData` but cannot auto-derive `Ord`
+// because `ArchivedF64` (from rend) only implements `PartialOrd`, not `Ord`.
+// We provide manual impls so that `BTreeSet<SortedSetData>` can implement `Archive`.
+impl PartialEq for ArchivedSortedSetData {
+    fn eq(&self, other: &Self) -> bool {
+        self.member.as_slice() == other.member.as_slice()
+            && self.score == other.score
+    }
+}
+
+impl Eq for ArchivedSortedSetData {}
+
+impl Ord for ArchivedSortedSetData {
+    fn cmp(&self, other: &Self) -> Ordering {
+        match self.score.partial_cmp(&other.score) {
+            Some(ordering) => {
+                if ordering != Ordering::Equal {
+                    return ordering;
+                }
+            }
+            None => return Ordering::Less,
+        }
+        self.member.as_slice().cmp(other.member.as_slice())
+    }
+}
+
+impl PartialOrd for ArchivedSortedSetData {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
     }
 }

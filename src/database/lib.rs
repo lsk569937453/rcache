@@ -1,4 +1,3 @@
-use crate::database::fs_writer::MyWriter;
 use crate::database::lru::{estimate_value_memory, LruTracker, MemoryTracker};
 use crate::database::aof::AofWriter;
 use crate::parser::response::Response;
@@ -14,13 +13,16 @@ use super::info::NodeInfo;
 use crate::logger::default_logger::setup_logger;
 use crate::vojo::value::ValueHash;
 use crate::vojo::value::ValueList;
-use bincode::{config, Decode, Encode};
+use rkyv::rancor::Error as RkyvError;
 use chrono::Utc;
 #[cfg(not(any(target_os = "windows")))]
 use fork::fork;
 #[cfg(not(any(target_os = "windows")))]
 use fork::Fork;
+#[cfg(not(any(target_os = "windows")))]
 use std::fs::OpenOptions;
+#[cfg(not(any(target_os = "windows")))]
+use std::io::Write;
 #[cfg(not(any(target_os = "windows")))]
 use std::ops::Deref;
 use std::sync::Arc;
@@ -198,25 +200,24 @@ impl DatabaseHolder {
     pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(10000));
         let file_path = "rcache.rdb";
-        let config = config::standard();
         loop {
             interval.tick().await;
-            let mut file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true)
-                .open(file_path.clone())?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             if let Ok(Fork::Child) = fork() {
                 let _worker_guard = setup_logger();
                 let database = lock.deref();
                 let key_len = lock.data[0].len();
                 let current_time = Instant::now();
-                let mywriter = MyWriter(file);
-                let res = bincode::encode_into_writer(database, mywriter, config.clone());
-                if let Err(e) = res {
-                    error!("{}", e);
-                }
+
+                let bytes = rkyv::to_bytes::<RkyvError>(database)
+                    .map_err(|e| anyhow!("rkyv serialize: {}", e))?;
+                let mut file = OpenOptions::new()
+                    .write(true)
+                    .create(true)
+                    .truncate(true)
+                    .open(file_path)?;
+                file.write_all(&bytes)?;
+
                 let first_cost = current_time.elapsed();
                 info!(
                     "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
@@ -239,14 +240,8 @@ impl DatabaseHolder {
     pub async fn rdb_save(&self) -> Result<(), anyhow::Error> {
         let mut interval = interval(Duration::from_millis(10000));
         let file_path = "rcache.rdb";
-        let config = config::standard();
         loop {
             interval.tick().await;
-            let file = OpenOptions::new()
-                .write(true)
-                .create(true)
-                .truncate(true) // Create the file if it does not exist
-                .open(file_path)?;
             let lock = self.database_lock.lock().map_err(|e| anyhow!("{}", e))?;
             let database = lock.clone();
             drop(lock);
@@ -254,30 +249,29 @@ impl DatabaseHolder {
 
             let key_len = database.data[0].len();
             let current_time = Instant::now();
-            let mywriter = MyWriter(file);
 
-            let res = bincode::encode_into_writer(database, mywriter, config);
-            if let Err(e) = res {
-                error!("{}", e);
-            }
+            let bytes = rkyv::to_bytes::<RkyvError>(&database)
+                .map_err(|e| anyhow!("rkyv serialize: {}", e))?;
+            std::fs::write(file_path, &bytes)?;
+
             let first_cost = current_time.elapsed();
             info!(
-                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
-                    key_len,
-                    first_cost.as_millis(),
-                    current_time.elapsed().as_millis()
-                );
+                        "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                        key_len,
+                        first_cost.as_millis(),
+                        current_time.elapsed().as_millis()
+                    );
             println!(
-                    "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
-                    key_len,
-                    first_cost.as_millis(),
-                    current_time.elapsed().as_millis()
-                );
+                        "Rdb file has been saved,keys count is {},encode time cost {}ms,total time cost {}ms",
+                        key_len,
+                        first_cost.as_millis(),
+                        current_time.elapsed().as_millis()
+                    );
         }
     }
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
-
+#[derive(rkyv::Archive, rkyv::Serialize, rkyv::Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct Database {
     pub data: Vec<HashMap<Vec<u8>, Value>>,
     pub expire_map: Vec<HashMap<Vec<u8>, i64>>,

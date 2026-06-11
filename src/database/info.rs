@@ -1,11 +1,12 @@
-use bincode::{Decode, Encode};
+use rkyv::{Archive, Deserialize, Serialize};
 use chrono::Utc;
 
 use super::lib::Database;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct NodeInfo {
     replication: Role,
     pub start_time: i64,
@@ -79,19 +80,21 @@ impl NodeInfo {
         )
     }
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
-
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub enum Role {
     Slave(SlaveInfo),
     Master(MasterInfo),
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct SlaveInfo {
     pub master_host: String,
     pub master_port: i32,
     pub master_link_status: String,
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct MasterInfo {
     pub connected_slaves: i32,
     pub slaves: Vec<NestedSlaveInfo>,
@@ -104,7 +107,8 @@ impl MasterInfo {
         }
     }
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub struct NestedSlaveInfo {
     pub ip: String,
     pub port: i32,
@@ -112,7 +116,8 @@ pub struct NestedSlaveInfo {
     pub offset: u128,
     pub lag: i32,
 }
-#[derive(Encode, Decode, PartialEq, Debug, Clone)]
+#[derive(Archive, Serialize, Deserialize, PartialEq, Debug, Clone)]
+#[rkyv(derive(Debug))]
 pub enum Status {
     Online,
     OffLine,
