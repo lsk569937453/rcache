@@ -5,20 +5,20 @@ edition = "2021"
 # See more keys and their definitions at: https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-anyhow = "=1.0.98"
+anyhow = "=1.0.102"
 rkyv = { version = "0.8", features = ["bytecheck"] }
-byte-unit = "=5.1.6"
-chrono = "=0.4.41"
-clap = { version = "=4.5.42", features = ["derive"] }
+byte-unit = "=5.2.0"
+chrono = "=0.4.45"
+clap = { version = "=4.6.1", features = ["derive"] }
 prettytable-rs = "=0.10"
-serde = { version = "=1.0.219", features = ["derive"] }
-serde_json = "=1.0.142"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.150"
 serde_yaml = "=0.9.34"
-skiplist = "=0.6.0"
-time = "=0.3.41"
-tokio = { version = "=1.47.1", features = ["full"] }
-tracing = "=0.1.41"
-tracing-appender = "=0.2.3"
-tracing-subscriber = "=0.3.19"
+skiplist = "=1.1.0"
+time = "=0.3.47"
+tokio = { version = "=1.52.3", features = ["full"] }
+tracing = "=0.1.44"
+tracing-appender = "=0.2.5"
+tracing-subscriber = "=0.3.23"
 [target.'cfg(not(windows))'.dependencies]
-fork = "=0.2.0"
+fork = "=0.7.0"
