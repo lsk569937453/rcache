@@ -57,8 +57,14 @@ impl DatabaseHolder {
     /// Initialize LRU trackers to match the current database keys.
     /// Called after loading RDB or AOF.
     pub fn init_lru_from_database(&self) {
-        let db = self.database_lock.lock().unwrap();
-        let mut state = self.lru_state.lock().unwrap();
+        let Ok(db) = self.database_lock.lock() else {
+            tracing::error!("database lock poisoned");
+            return;
+        };
+        let Ok(mut state) = self.lru_state.lock() else {
+            tracing::error!("lru state lock poisoned");
+            return;
+        };
         // Track existing keys and estimate memory
         for shard_idx in 0..db.data.len() {
             for (key, value) in &db.data[shard_idx] {
